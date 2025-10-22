@@ -1,0 +1,89 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SUPERADMIN
+  ADMIN
+  USER
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  noHp      String   @unique
+  password  String
+  role      Role     @default(USER)
+  outletId  String?  @map("outlet_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  email     String?
+
+  outlet Outlet? @relation(fields: [outletId], references: [id])
+
+  @@map("users")
+}
+
+model Outlet {
+  id              String   @id @default(cuid())
+  namaOutlet      String   @map("nama_outlet")
+  alamat          String
+  telepon         String
+  whatsappNumber  String   @map("whatsapp_number")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  users     User[]
+  customers Customer[]
+
+  @@map("outlets")
+}
+
+model Customer {
+  id        String   @id @default(cuid())
+  nama      String
+  noWa      String   @map("no_wa")
+  outletId  String   @map("outlet_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  outlet Outlet @relation(fields: [outletId], references: [id], onDelete: Cascade)
+
+  @@map("customers")
+}
+
+model Blast {
+  id           String   @id @default(cuid())
+  message      String
+  targetCount  Int
+  sentCount    Int
+  failedCount  Int
+  createdAt    DateTime @default(now()) @map("created_at")
+  userId       String
+  
+  // Relasi (opsional, bisa ditambahkan jika perlu)
+  // user         User     @relation(fields: [userId], references: [id])
+  
+  reports BlastReport[]
+
+  @@map("blasts")
+}
+
+model BlastReport {
+  id             String   @id @default(cuid())
+  blastId        String
+  blast          Blast    @relation(fields: [blastId], references: [id], onDelete: Cascade)
+  customerId     String
+  customerName   String
+  status         String // "sent" or "failed"
+  
+  @@map("blast_reports")
+}

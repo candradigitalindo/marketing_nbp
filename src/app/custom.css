@@ -14,25 +14,25 @@
 
 /* Bootstrap Override */
 .btn-primary {
-  background-color: var(--bs-primary);
-  border-color: var(--bs-primary);
+  background-color: var(--bs-primary) !important;
+  border-color: var(--bs-primary) !important;
 }
 
 .btn-primary:hover {
-  background-color: #0ea5e9;
-  border-color: #0ea5e9;
+  background-color: #0ea5e9 !important;
+  border-color: #0ea5e9 !important;
 }
 
 .btn-secondary {
-  background-color: var(--bs-secondary);
-  border-color: var(--bs-secondary);
-  color: #1e293b;
+  background-color: var(--bs-secondary) !important;
+  border-color: var(--bs-secondary) !important;
+  color: #1e293b !important;
 }
 
 .btn-secondary:hover {
-  background-color: #eab308;
-  border-color: #eab308;
-  color: #1e293b;
+  background-color: #eab308 !important;
+  border-color: #eab308 !important;
+  color: #1e293b !important;
 }
 
 .bg-primary {
