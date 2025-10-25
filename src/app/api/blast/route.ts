@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { WhatsAppService } from '@/modules/wa/services/whatsapp.service'
+import { getBlastQueue } from '@/lib/queue'
 import { z } from 'zod'
 
 const whatsappService = new WhatsAppService()
@@ -177,17 +178,60 @@ export async function POST(request: NextRequest) {
 
     console.log(`[Blast API] Calling whatsappService.sendBlast with role: ${session.user.role}, outletId: ${session.user.outletId}`)
 
-    const result = await whatsappService.sendBlast(
-      { message, outletIds, customerIds },
-      session.user.role,
-      session.user.outletId,
-      mediaFiles.length > 0 ? mediaFiles : undefined,
-      sendMode
+    // Create blast record first
+    const blast = await prisma.blast.create({
+      data: {
+        message,
+        targetCount: 0, // Will be updated by worker
+        sentCount: 0,
+        failedCount: 0,
+        userId: session.user.id,
+        outletId: session.user.outletId || outletIds?.[0] || '', // Use first outlet if available
+        status: 'QUEUED',
+        sendMode,
+        mediaType: mediaFiles.length > 0 ? mediaFiles[0].mimetype : null,
+      },
+    })
+
+    console.log(`[Blast API] Blast record created: ${blast.id}`)
+
+    // Add job to queue
+    const queue = getBlastQueue()
+    
+    // Convert Buffer to base64 for Redis serialization
+    const mediaFilesForQueue = mediaFiles.map(file => ({
+      base64: file.buffer.toString('base64'),
+      fileName: file.fileName,
+      mimetype: file.mimetype,
+    }))
+    
+    const job = await queue.add(
+      `blast-${blast.id}`,
+      {
+        blastId: blast.id,
+        message,
+        outletIds,
+        customerIds,
+        userId: session.user.id,
+        userRole: session.user.role,
+        userOutletId: session.user.outletId,
+        mediaFiles: mediaFilesForQueue,
+        sendMode,
+      },
+      {
+        jobId: blast.id, // Use blast ID as job ID for easy tracking
+      }
     )
 
-    console.log(`[Blast API] sendBlast completed - success: ${result.success}, sent: ${result.sentCount}, failed: ${result.failedCount}`)
+    console.log(`[Blast API] Job ${job.id} added to queue`)
 
-    return NextResponse.json(result, { status: 200 })
+    return NextResponse.json({
+      success: true,
+      message: 'Blast dijadwalkan dan akan diproses di background',
+      blastId: blast.id,
+      jobId: job.id,
+      status: 'QUEUED',
+    }, { status: 202 }) // 202 Accepted
 
   } catch (error) {
     console.error('[Blast API] Error sending blast:', error)

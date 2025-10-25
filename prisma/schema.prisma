@@ -49,6 +49,14 @@ enum MessageDirection {
   OUTBOUND
 }
 
+enum BlastStatus {
+  QUEUED      // Blast dijadwalkan, menunggu eksekusi
+  PROCESSING  // Blast sedang berjalan di background
+  COMPLETED   // Blast selesai
+  FAILED      // Blast gagal total
+  CANCELLED   // User membatalkan
+}
+
 model User {
   id        String   @id @default(cuid())
   name      String
@@ -117,7 +125,8 @@ model Blast {
   mediaType    String?  @map("media_type")
   scheduledAt  DateTime? @map("scheduled_at")
   completedAt  DateTime? @map("completed_at")
-  status       String   @default("draft") // draft, scheduled, sending, completed, failed
+  status       BlastStatus @default(QUEUED)
+  sendMode     String?  @default("separate") @map("send_mode") // separate or caption
   
   user         User     @relation(fields: [userId], references: [id])
   outlet       Outlet   @relation(fields: [outletId], references: [id], onDelete: Cascade)

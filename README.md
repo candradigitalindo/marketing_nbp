@@ -1,299 +1,141 @@
-# Marketing NBP - WhatsApp Blast System
+# 📱 Marketing NBP - WhatsApp Blast System
 
-Sistem manajemen marketing dengan fitur WhatsApp blast untuk mengelola outlet, customer, dan kampanye pemasaran.
+Sistem Marketing WhatsApp dengan fitur Broadcast otomatis menggunakan **Background Job Queue**.
 
-## 🚀 Fitur Utama
+## ✨ Fitur Utama
 
-### Role & Akses (3 Level)
-- **SUPERADMIN**: Akses penuh semua fitur, CRUD Outlet, CRUD semua customer, Blast WA ke semua customer
-- **ADMIN**: Akses semua customer, Blast WA ke semua customer atau filter by outlet (tidak bisa CRUD outlet)
-- **USER**: CRUD customer milik outlet sendiri, Blast WA hanya ke customer outlet sendiri (1 user per outlet)
+- 🔐 Multi-user Authentication (SuperAdmin, Admin, User)
+- 📊 Dashboard Analytics real-time
+- 🏪 Outlet Management dengan WhatsApp Integration
+- 👥 Customer Management per outlet
+- 📤 **WhatsApp Blast dengan Background Processing (BullMQ + Redis)**
+- 📷 Media Support (Gambar, Dokumen, PDF) dengan caption
+- ⚡ Anti-spam Protection dengan randomized delays
+- 📝 Message Templates
+- 📈 Blast Reports dan tracking status
 
-### Modul Aplikasi
-- **Dashboard**: Overview statistik dan quick actions
-- **Outlet Management**: CRUD outlet dengan nomor WhatsApp (khusus SUPERADMIN)
-- **Customer Management**: CRUD customer dengan filtering berdasarkan role
-- **WhatsApp Blast**: Kirim pesan massal dengan QR scan integration
-- **Authentication**: Login dengan NextAuth dan role-based access
+## 🚀 Quick Start
 
-## 🛠 Tech Stack
-
-- **Framework**: Next.js 14+ (App Router)
-- **Language**: TypeScript
-- **Database**: PostgreSQL dengan Prisma ORM
-- **Authentication**: NextAuth.js dengan JWT
-- **UI Library**: Bootstrap 5 dengan custom colors
-- **Primary Keys**: ULID untuk semua tabel
-
-## 📁 Struktur Folder
-
-```
-src/
-├── app/                    # Next.js App Router pages & API routes
-│   ├── api/               # API endpoints
-│   │   ├── auth/          # NextAuth API
-│   │   ├── outlets/       # Outlet CRUD APIs
-│   │   ├── customers/     # Customer CRUD APIs
-│   │   └── blast/         # WhatsApp blast APIs
-│   ├── dashboard/         # Dashboard pages
-│   ├── login/            # Login page
-│   ├── outlets/          # Outlet management (SUPERADMIN only)
-│   ├── customers/        # Customer management
-│   ├── blast/            # WhatsApp blast interface
-│   └── providers/        # React providers
-├── modules/               # Business logic modules
-│   ├── auth/             # Authentication logic
-│   ├── outlets/          # Outlet business logic
-│   │   ├── repositories/ # Data access layer
-│   │   ├── services/     # Business logic layer
-│   │   └── types/        # TypeScript interfaces
-│   ├── customers/        # Customer business logic
-│   └── wa/              # WhatsApp blast logic
-├── lib/                  # Utilities & configurations
-│   ├── prisma.ts        # Prisma client
-│   ├── auth.ts          # NextAuth configuration
-│   └── utils.ts         # Helper functions
-└── middleware.ts         # Route protection middleware
-```
-
-## ⚙️ Installation & Setup
-
-### 1. Clone Repository
 ```bash
+# 1. Clone repository
 git clone <repository-url>
 cd marketing_nbp
-```
 
-### 2. Install Dependencies
-```bash
+# 2. Install dependencies
 npm install
-```
 
-### 3. Environment Setup
-Copy `.env.example` to `.env` dan sesuaikan konfigurasi:
+# 3. Setup environment
+cp .env.example .env
+# Edit .env sesuai konfigurasi (DATABASE_URL, REDIS_URL, dll)
 
-```env
-# Database
-DATABASE_URL="postgresql://username:password@localhost:5432/marketing_nbp?schema=public"
-
-# NextAuth
-NEXTAUTH_URL="http://localhost:3000"
-NEXTAUTH_SECRET="your-secret-key-here"
-
-# WhatsApp Integration (optional)
-WA_API_URL="https://your-wa-service.com/api"
-WA_API_KEY="your-wa-api-key"
-```
-
-### 4. Database Setup
-```bash
-# Generate Prisma client
+# 4. Database setup
 npx prisma generate
+npx prisma migrate deploy
+npm run seed
 
-# Push database schema
-npx prisma db push
-
-# Seed database with demo data
-npx prisma db seed
+# 5. Start aplikasi (Next.js + Worker)
+npm run dev:all
 ```
 
-### 5. Development Server
-```bash
-npm run dev
-```
+**Default Login:**
+- Username: `superadmin`
+- Password: `admin123`
 
-Aplikasi akan berjalan di `http://localhost:3000`
+## 📖 Dokumentasi Lengkap
 
-## 🗄 Database Schema
+**👉 Lihat [DOKUMENTASI.md](./DOKUMENTASI.md) untuk:**
 
-### Model Utama
+- 📋 Kebutuhan sistem (Node.js, PostgreSQL, Redis)
+- 📦 Instalasi lengkap step-by-step
+- ⚙️ Konfigurasi environment
+- � Cara menjalankan aplikasi
+- 📖 Tutorial penggunaan
+- ⚙️ Background job system (BullMQ)
+- 📊 Monitoring tools
+- 🔧 Troubleshooting
+- 📁 Struktur project detail
 
-#### User
-- `id`: String (CUID)
-- `email`: String (unique)
-- `name`: String
-- `password`: String (hashed)
-- `role`: Enum (SUPERADMIN, ADMIN, USER)
-- `outletId`: String (optional, foreign key)
+## � Tech Stack
 
-#### Outlet
-- `id`: String (CUID)
-- `namaOutlet`: String
-- `alamat`: String
-- `telepon`: String
-- `whatsappNumber`: String (unique per outlet)
+- **Framework:** Next.js 14+ (App Router)
+- **Language:** TypeScript
+- **Database:** PostgreSQL dengan Prisma ORM
+- **Background Jobs:** BullMQ + Redis
+- **WhatsApp:** Baileys (Multi-device API)
+- **Authentication:** NextAuth.js
+- **UI:** Bootstrap 5 + Custom Theme
 
-#### Customer
-- `id`: String (CUID)
-- `nama`: String
-- `noWa`: String (formatted WhatsApp number)
-- `email`: String (optional)
-- `outletId`: String (foreign key)
+## ⚡ Background Job System
 
-## 🔐 Authentication & Authorization
-
-### Login Credentials (Development)
-```
-SUPERADMIN: admin@example.com / password
-ADMIN:      outlet@example.com / password  
-USER:       user@example.com / password
-```
-
-### Role-based Access
-- Middleware melindungi route berdasarkan role
-- API endpoints memvalidasi akses sesuai role
-- UI components menyesuaikan tampilan berdasarkan role
-
-## 📱 WhatsApp Integration
-
-### QR Scan Process
-1. Setiap outlet memiliki 1 nomor WhatsApp
-2. Nomor WhatsApp di-scan untuk integrasi
-3. Status device (connected/disconnected/scanning)
-4. Blast menggunakan nomor WhatsApp outlet sebagai pengirim
-
-### Blast Rules
-- **SUPERADMIN**: Semua customer dari semua outlet
-- **ADMIN**: Semua customer atau filter by outlet
-- **USER**: Hanya customer dari outlet sendiri
-
-## 🎨 UI/UX Design
-
-### Bootstrap 5 Custom Theme
-- **Primary Color**: #38bdf8 (Sky Blue)
-- **Secondary Color**: #facc15 (Yellow)
-- Modern card design dengan shadow
-- Responsive sidebar navigation
-- Clean table layouts dengan hover effects
-
-### Features
-- Font Awesome icons
-- Loading states & spinners
-- Alert notifications
-- Modal dialogs
-- Responsive design (mobile-friendly)
-
-## 🚀 Build & Deploy
-
-### Production Build
-```bash
-npm run build
-npm start
-```
-
-### Docker (Optional)
-```dockerfile
-FROM node:18-alpine
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci --only=production
-COPY . .
-RUN npm run build
-EXPOSE 3000
-CMD ["npm", "start"]
-```
-
-## 📈 Development Scripts
+Sistem blast menggunakan **BullMQ** untuk processing background:
 
 ```bash
-# Development
-npm run dev
+# PENTING: Worker WAJIB running untuk blast bekerja!
 
-# Build
-npm run build
+# Option 1: Auto-start semua (Recommended)
+npm run dev:all
 
-# Start production
-npm start
-
-# Database operations
-npx prisma studio          # Open Prisma Studio
-npx prisma migrate dev      # Run migrations
-npx prisma generate        # Generate client
-npx prisma db push         # Push schema to database
-
-# Linting
-npm run lint
+# Option 2: Manual (2 terminal)
+npm run dev      # Terminal 1
+npm run worker   # Terminal 2
 ```
 
-## 🔧 API Endpoints
+**Kenapa butuh worker?**
+- ✅ Blast berjalan di background
+- ✅ User tidak perlu tunggu
+- ✅ Anti-spam delays otomatis
+- ✅ Auto retry jika gagal
+- ✅ Progress tracking real-time
 
-### Authentication
-- `POST /api/auth/signin` - Login
-- `POST /api/auth/signout` - Logout
+## � Monitoring Tools
 
-### Outlets (SUPERADMIN only)
-- `GET /api/outlets` - List outlets
-- `POST /api/outlets` - Create outlet
-- `PUT /api/outlets/[id]` - Update outlet
-- `DELETE /api/outlets/[id]` - Delete outlet
+```bash
+# Cek status blast
+node check-blast.js
 
-### Customers
-- `GET /api/customers` - List customers (filtered by role)
-- `POST /api/customers` - Create customer
-- `PUT /api/customers/[id]` - Update customer
-- `DELETE /api/customers/[id]` - Delete customer
+# Cek Redis queue
+./check-queue.sh
 
-### WhatsApp Blast
-- `POST /api/blast` - Send WhatsApp blast
-- `POST /api/blast/preview` - Preview blast targets
-- `GET /api/blast/qr/[whatsappNumber]` - Get QR code for WhatsApp
+# Pre-flight system check
+node preflight-check.js
 
-## 🛡 Security Features
+# View database
+npx prisma studio
+```
 
-- JWT-based authentication
-- Password hashing with bcryptjs
-- Role-based route protection
-- API endpoint authorization
-- Input validation with Zod
-- CSRF protection (NextAuth)
+## 🔧 Troubleshooting Cepat
 
-## 🐛 Troubleshooting
+| Problem | Solution |
+|---------|----------|
+| Blast stuck di QUEUED | Start worker: `npm run worker` |
+| Redis connection failed | Start Redis: `brew services start redis` |
+| WhatsApp not connected | Scan QR code di halaman Blast |
+| Port 3000 in use | Kill process: `lsof -ti:3000 \| xargs kill -9` |
 
-### Common Issues
+**Lihat [DOKUMENTASI.md](./DOKUMENTASI.md#-troubleshooting) untuk troubleshooting lengkap.**
 
-1. **Database Connection Error**
-   - Pastikan PostgreSQL running
-   - Check DATABASE_URL di .env
-   - Jalankan `npx prisma migrate dev`
+## � Quick Commands
 
-2. **NextAuth Error**
-   - Set NEXTAUTH_SECRET di .env
-   - Pastikan NEXTAUTH_URL sesuai domain
+| Action | Command |
+|--------|---------|
+| Start semua | `npm run dev:all` |
+| Start server only | `npm run dev` |
+| Start worker only | `npm run worker` |
+| Build production | `npm run build` |
+| Database migrate | `npx prisma migrate deploy` |
+| Database studio | `npx prisma studio` |
 
-3. **Bootstrap Styling Issues**
-   - Clear browser cache
-   - Check import order di layout.tsx
+## 🔒 Security Notes
 
-## 📝 Development Notes
+- ⚠️ Ganti `NEXTAUTH_SECRET` di production
+- ⚠️ Jangan commit `.env` ke Git
+- ⚠️ WhatsApp sessions ada di folder `sessions/` (di .gitignore)
+- ⚠️ Gunakan Redis password di production
 
-### Repository Pattern
-- Setiap module menggunakan repository pattern
-- Service layer untuk business logic
-- Repository layer untuk data access
-- Clear separation of concerns
+## � License
 
-### Type Safety
-- Strict TypeScript configuration
-- Interface definitions untuk semua data
-- Zod validation untuk API inputs
-- Prisma-generated types
-
-## 🤝 Contributing
-
-1. Fork repository
-2. Create feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit changes (`git commit -m 'Add amazing feature'`)
-4. Push to branch (`git push origin feature/amazing-feature`)
-5. Open Pull Request
-
-## 📄 License
-
-This project is licensed under the MIT License.
-
-## 👥 Team
-
-Developed by NBP Development Team for Marketing WhatsApp Blast System.
+Private Project - All Rights Reserved
 
 ---
 
-**Note**: Ini adalah aplikasi demo dengan stub WhatsApp integration. Untuk production, integrate dengan WhatsApp Business API atau service provider seperti Twilio, WooWA, dll.
+**📚 [BACA DOKUMENTASI LENGKAP](./DOKUMENTASI.md)** untuk tutorial instalasi dan cara menggunakan semua fitur.

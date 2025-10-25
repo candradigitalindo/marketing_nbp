@@ -232,9 +232,13 @@ export class WhatsAppRepository {
         })
       }
 
-      // small delay to avoid rate limit (increase for media)
-      const delay = mediaFiles && mediaFiles.length > 0 ? 2500 : 1000 // Increased delay for media
-      console.log(`[BlastRepository] Waiting ${delay}ms before next message...`)
+      // Anti-spam: Randomized delay between messages to appear more human-like
+      // This helps avoid WhatsApp spam detection and potential bans
+      const baseDelay = mediaFiles && mediaFiles.length > 0 ? 3000 : 1500
+      const randomVariation = Math.floor(Math.random() * 2000) // 0-2000ms random variation
+      const delay = baseDelay + randomVariation // Total: 1.5-3.5s (text) or 3-5s (media)
+      
+      console.log(`[BlastRepository] Waiting ${delay}ms before next message (anti-spam randomization)...`)
       await new Promise((r) => setTimeout(r, delay))
     }
 

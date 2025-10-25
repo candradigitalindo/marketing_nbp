@@ -31,6 +31,9 @@ export default function BlastPage() {
   const [selectedOutlets, setSelectedOutlets] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [blastResult, setBlastResult] = useState<any>(null)
+  const [blastStatus, setBlastStatus] = useState<'idle' | 'queued' | 'processing' | 'completed' | 'failed'>('idle')
+  const [currentBlastId, setCurrentBlastId] = useState<string | null>(null)
+  const [jobProgress, setJobProgress] = useState<any>(0)
   const [outlets, setOutlets] = useState<Outlet[]>([])
   const [outletsLoading, setOutletsLoading] = useState(true)
   const [templates, setTemplates] = useState<MessageTemplate[]>([])
@@ -179,6 +182,7 @@ export default function BlastPage() {
     }
 
     setIsLoading(true)
+    setBlastStatus('idle')
     try {
       const formData = new FormData()
       formData.append('message', message)
@@ -200,20 +204,60 @@ export default function BlastPage() {
 
       if (response.ok) {
         const result = await response.json()
-        setBlastResult(result)
-        // Clear form on success
-        setMessage('')
-        setAttachedFiles([])
+        
+        // NEW: Handle background job response
+        if (result.blastId && result.status === 'QUEUED') {
+          setCurrentBlastId(result.blastId)
+          setBlastStatus('queued')
+          setBlastResult(null)
+          
+          // Clear form on success
+          setMessage('')
+          setAttachedFiles([])
+          
+          // Start polling for status
+          pollBlastStatus(result.blastId)
+        } else {
+          // Fallback for old synchronous response
+          setBlastResult(result)
+          setBlastStatus('completed')
+        }
       } else {
         const error = await response.json()
         alert(`Error: ${error.error}`)
+        setBlastStatus('failed')
       }
     } catch (error) {
       console.error('Error sending blast:', error)
       alert('Gagal mengirim blast')
+      setBlastStatus('failed')
     } finally {
       setIsLoading(false)
     }
+  }
+
+  // NEW: Poll blast status
+  const pollBlastStatus = async (blastId: string) => {
+    const pollInterval = setInterval(async () => {
+      try {
+        const response = await fetch(`/api/blast/${blastId}`)
+        if (response.ok) {
+          const data = await response.json()
+          
+          setBlastStatus(data.status.toLowerCase())
+          setJobProgress(data.jobProgress || 0)
+          
+          // Stop polling when completed or failed
+          if (data.status === 'COMPLETED' || data.status === 'FAILED') {
+            clearInterval(pollInterval)
+            setBlastResult(data)
+            setCurrentBlastId(null)
+          }
+        }
+      } catch (error) {
+        console.error('Error polling blast status:', error)
+      }
+    }, 2000) // Poll every 2 seconds
   }
 
   const handlePreview = () => {
@@ -280,6 +324,46 @@ Karakter: ${message.length}/4000
         {/* Main Content */}
         <div className="row">
           <div className="col-lg-8 mb-4">
+            {/* Blast Status Indicator - NEW */}
+            {(blastStatus === 'queued' || blastStatus === 'processing') && (
+              <div className="card mb-4">
+                <div className="card-body p-4">
+                  <div className="d-flex align-items-center mb-3">
+                    <div className="spinner-border text-primary me-3" role="status">
+                      <span className="visually-hidden">Loading...</span>
+                    </div>
+                    <div>
+                      <h5 className="mb-1 fw-bold">
+                        {blastStatus === 'queued' ? '📋 Blast Dijadwalkan' : '⚡ Blast Sedang Berjalan'}
+                      </h5>
+                      <small className="text-muted">
+                        {blastStatus === 'queued' 
+                          ? 'Blast Anda telah masuk antrian dan akan segera diproses...'
+                          : 'Sedang mengirim pesan ke pelanggan...'}
+                      </small>
+                    </div>
+                  </div>
+                  
+                  {blastStatus === 'processing' && (
+                    <div className="progress" style={{ height: '25px' }}>
+                      <div 
+                        className="progress-bar progress-bar-striped progress-bar-animated bg-primary" 
+                        role="progressbar" 
+                        style={{ width: `${typeof jobProgress === 'number' ? jobProgress : 0}%` }}
+                      >
+                        {typeof jobProgress === 'number' ? `${jobProgress}%` : 'Processing...'}
+                      </div>
+                    </div>
+                  )}
+                  
+                  <div className="alert alert-info mt-3 mb-0 d-flex align-items-center">
+                    <i className="fas fa-info-circle me-2"></i>
+                    Anda dapat menutup halaman ini. Blast akan berjalan di background dan hasil akan tersimpan.
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Blast Results - MOVED TO TOP */}
             {blastResult && (
               <div className="card mb-4">
@@ -614,22 +698,38 @@ Karakter: ${message.length}/4000
                             {attachedFiles.length} file terlampir
                           </span>
                         )}
-                        {attachedFiles.some(f => f.type === 'image') && message.trim() && (
+                        {attachedFiles.length > 0 && message.trim() && (
                           <span className="d-block mt-2">
                             <strong>Mode Pengiriman:</strong>
                             {sendMode === 'separate' ? (
                               <span className="text-primary d-block">
-                                → Teks dulu, lalu gambar terpisah
+                                → Teks dulu, lalu file terpisah
                               </span>
                             ) : (
                               <span className="text-success d-block">
-                                → Teks sebagai caption gambar
+                                → Teks sebagai caption file pertama
                               </span>
                             )}
                           </span>
                         )}
                       </span>
                     </small>
+                  </div>
+                  
+                  {/* Anti-Spam Tips */}
+                  <div className="alert alert-warning mt-3 py-2 px-3" style={{ fontSize: '0.85rem' }}>
+                    <div className="d-flex align-items-start gap-2">
+                      <i className="fas fa-shield-alt mt-1"></i>
+                      <div>
+                        <strong>Anti-Spam Protection Aktif:</strong>
+                        <ul className="mb-0 mt-1 ps-3" style={{ fontSize: '0.8rem' }}>
+                          <li>Delay acak 1.5-3.5 detik (text) atau 3-5 detik (media) antar pesan</li>
+                          <li>Untuk blast besar (100+ customer), disarankan kirim bertahap</li>
+                          <li>Personalisasi pesan dengan nama customer untuk hasil lebih baik</li>
+                          <li>Hindari blast lebih dari 500 pesan/hari per nomor</li>
+                        </ul>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
