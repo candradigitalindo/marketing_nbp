@@ -21,11 +21,13 @@ export default function OutletModal({
   const [formData, setFormData] = useState({
     namaOutlet: '',
     alamat: '',
-    telepon: '',
     whatsappNumber: ''
   })
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(false)
+  const [checkingNumber, setCheckingNumber] = useState(false)
+  const [numberCheckResult, setNumberCheckResult] = useState<{ valid: boolean; exists: boolean; message: string } | null>(null)
+  const [lastCheckedNumber, setLastCheckedNumber] = useState('')
 
   useEffect(() => {
     if (isOpen) {
@@ -33,14 +35,12 @@ export default function OutletModal({
         setFormData({
           namaOutlet: outlet.namaOutlet || '',
           alamat: outlet.alamat || '',
-          telepon: outlet.telepon || '',
           whatsappNumber: outlet.whatsappNumber || ''
         })
       } else {
         setFormData({
           namaOutlet: '',
           alamat: '',
-          telepon: '',
           whatsappNumber: ''
         })
       }
@@ -59,20 +59,63 @@ export default function OutletModal({
       newErrors.alamat = 'Alamat wajib diisi'
     }
 
-    if (!formData.telepon.trim()) {
-      newErrors.telepon = 'Nomor telepon wajib diisi'
-    } else if (!/^\+?[0-9\s-()]+$/.test(formData.telepon)) {
-      newErrors.telepon = 'Format nomor telepon tidak valid'
-    }
+    // telepon field removed from model
 
     if (!formData.whatsappNumber.trim()) {
       newErrors.whatsappNumber = 'Nomor WhatsApp wajib diisi'
     } else if (!/^\+?[0-9\s-()]+$/.test(formData.whatsappNumber)) {
       newErrors.whatsappNumber = 'Format nomor WhatsApp tidak valid'
+    } else if (numberCheckResult === null) {
+      // No check result yet - ask user to verify first
+      newErrors.whatsappNumber = 'Silakan klik tombol Check untuk verifikasi nomor'
+    } else if (!numberCheckResult.valid && numberCheckResult.exists === false && 
+               !numberCheckResult.message.includes('format valid') &&
+               !numberCheckResult.message.includes('Silakan hubungkan') &&
+               !numberCheckResult.message.includes('coba manual')) {
+      // Only block if explicitly not found on WhatsApp
+      newErrors.whatsappNumber = numberCheckResult.message
     }
 
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
+  }
+
+  const checkWhatsAppNumber = async (phoneNumber: string) => {
+    if (!phoneNumber.trim() || !/^\+?[0-9\s-()]+$/.test(phoneNumber)) {
+      setNumberCheckResult(null)
+      return
+    }
+
+    // Skip if we already checked this number
+    if (lastCheckedNumber === phoneNumber) {
+      return
+    }
+
+    setCheckingNumber(true)
+    try {
+      const response = await fetch('/api/outlets/check-number', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ whatsappNumber: phoneNumber })
+      })
+
+      const result = await response.json()
+      setNumberCheckResult(result)
+      setLastCheckedNumber(phoneNumber)
+      
+      if (!result.exists) {
+        console.log('[OutletModal] WhatsApp number check result:', result.message)
+      }
+    } catch (error) {
+      console.error('[OutletModal] Error checking WhatsApp number:', error)
+      setNumberCheckResult({
+        valid: false,
+        exists: false,
+        message: 'Gagal memverifikasi nomor WhatsApp'
+      })
+    } finally {
+      setCheckingNumber(false)
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -98,6 +141,12 @@ export default function OutletModal({
     // Clear error when user starts typing
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: '' }))
+    }
+
+    // Reset number check result when user changes WhatsApp number
+    if (name === 'whatsappNumber') {
+      setNumberCheckResult(null)
+      setLastCheckedNumber('')
     }
   }
 
@@ -161,41 +210,77 @@ export default function OutletModal({
                   )}
                 </div>
 
-                <div className="col-md-6 mb-3">
-                  <label htmlFor="telepon" className="form-label">
-                    Nomor Telepon <span className="text-danger">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    className={`form-control ${errors.telepon ? 'is-invalid' : ''}`}
-                    id="telepon"
-                    name="telepon"
-                    value={formData.telepon}
-                    onChange={handleChange}
-                    placeholder="+62 21 1234567"
-                    disabled={loading}
-                  />
-                  {errors.telepon && (
-                    <div className="invalid-feedback">{errors.telepon}</div>
-                  )}
-                </div>
+                {/* telepon field removed */}
 
                 <div className="col-md-6 mb-3">
                   <label htmlFor="whatsappNumber" className="form-label">
                     Nomor WhatsApp <span className="text-danger">*</span>
                   </label>
-                  <input
-                    type="text"
-                    className={`form-control ${errors.whatsappNumber ? 'is-invalid' : ''}`}
-                    id="whatsappNumber"
-                    name="whatsappNumber"
-                    value={formData.whatsappNumber}
-                    onChange={handleChange}
-                    placeholder="+62 812 3456 7890"
-                    disabled={loading}
-                  />
+                  <div className="input-group">
+                    <input
+                      type="text"
+                      className={`form-control ${errors.whatsappNumber ? 'is-invalid' : ''}`}
+                      id="whatsappNumber"
+                      name="whatsappNumber"
+                      value={formData.whatsappNumber}
+                      onChange={handleChange}
+                      placeholder="08xxxxxxxxx"
+                      disabled={loading || checkingNumber}
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-outline-primary"
+                      onClick={() => checkWhatsAppNumber(formData.whatsappNumber)}
+                      disabled={loading || checkingNumber || !formData.whatsappNumber.trim()}
+                      title="Verifikasi nomor WhatsApp"
+                    >
+                      {checkingNumber ? (
+                        <span className="spinner-border spinner-border-sm" role="status"></span>
+                      ) : (
+                        <i className="fas fa-check"></i>
+                      )}
+                    </button>
+                  </div>
                   {errors.whatsappNumber && (
-                    <div className="invalid-feedback">{errors.whatsappNumber}</div>
+                    <div className="invalid-feedback d-block">{errors.whatsappNumber}</div>
+                  )}
+                  
+                  {/* Show number check result */}
+                  {numberCheckResult && (
+                    <div className={`mt-2 alert border-0 py-2 px-3 ${
+                      numberCheckResult.exists 
+                        ? 'alert-success' 
+                        : (numberCheckResult.message.includes('format valid') || 
+                           numberCheckResult.message.includes('Silakan hubungkan') ||
+                           numberCheckResult.message.includes('coba manual'))
+                        ? 'alert-info'
+                        : 'alert-warning'
+                    }`}>
+                      <small>
+                        <i className={`fas ${
+                          numberCheckResult.exists 
+                            ? 'fa-check-circle' 
+                            : (numberCheckResult.message.includes('format valid') || 
+                               numberCheckResult.message.includes('Silakan hubungkan'))
+                            ? 'fa-info-circle'
+                            : 'fa-exclamation-triangle'
+                        } me-2`}></i>
+                        {numberCheckResult.message}
+                      </small>
+                      
+                      {/* Show guidance when no WhatsApp session is connected */}
+                      {numberCheckResult.message.includes('Silakan hubungkan') && (
+                        <div className="mt-2 pt-2 border-top border-info border-opacity-50">
+                          <small className="d-block mb-2">
+                            <strong>💡 Solusi:</strong> Silakan hubungkan akun WhatsApp Anda terlebih dahulu di halaman Outlets sebelum melakukan verifikasi nomor.
+                          </small>
+                          <a href="/outlets" className="btn btn-sm btn-outline-info">
+                            <i className="fas fa-arrow-right me-1"></i>
+                            Ke Halaman Outlets
+                          </a>
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>

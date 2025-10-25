@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { SessionProvider } from "./providers/SessionProvider";
+import Providers from "./providers/Providers";
 import Script from "next/script";
 
 export const metadata: Metadata = {
@@ -11,7 +11,7 @@ export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
-}>) {
+}>) {  
   return (
     <html lang="id">
       <head>
@@ -235,9 +235,9 @@ export default function RootLayout({
         }} />
       </head>
       <body>
-        <SessionProvider>
+        <Providers>
           {children}
-        </SessionProvider>
+        </Providers>
         <Script
           src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
           integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"

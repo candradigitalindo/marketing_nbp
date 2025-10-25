@@ -10,12 +10,26 @@ import { prisma } from '@/lib/prisma'
 export async function GET() {
   const session = await getServerSession(authOptions)
 
-  if (!session || session.user.role !== 'SUPERADMIN') {
+  if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  const { user } = session
+  let whereClause: any = {}
+
+  // Filter by role
+  if (user.role === 'USER') {
+    if (!user.outletId) {
+      // User is not assigned to an outlet, return empty
+      return NextResponse.json({ outlets: [] })
+    }
+    whereClause.id = user.outletId
+  }
+  // SUPERADMIN and ADMIN can see all outlets
+
   try {
     const outlets = await prisma.outlet.findMany({
+      where: whereClause,
       include: {
         _count: {
           select: {
@@ -51,9 +65,9 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { namaOutlet, alamat, telepon, whatsappNumber } = body
+    const { namaOutlet, alamat, whatsappNumber } = body
 
-    if (!namaOutlet || !alamat || !telepon || !whatsappNumber) {
+    if (!namaOutlet || !alamat || !whatsappNumber) {
       return NextResponse.json(
         { error: 'Semua field harus diisi' },
         { status: 400 }
@@ -61,7 +75,7 @@ export async function POST(request: NextRequest) {
     }
 
     const newOutlet = await prisma.outlet.create({
-      data: { namaOutlet, alamat, telepon, whatsappNumber },
+      data: { namaOutlet, alamat, whatsappNumber },
     })
 
     return NextResponse.json({ outlet: newOutlet }, { status: 201 })

@@ -47,7 +47,6 @@ export class CustomerRepository {
             id: true,
             namaOutlet: true,
             alamat: true,
-            telepon: true,
             whatsappNumber: true,
           },
         },

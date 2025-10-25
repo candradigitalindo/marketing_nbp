@@ -16,6 +16,39 @@ enum Role {
   USER
 }
 
+enum WhatsappStatus {
+  DISCONNECTED
+  CONNECTING
+  CONNECTED
+  PAUSED
+  FAILED
+  TIMEOUT
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  VIDEO
+  AUDIO
+  DOCUMENT
+  STICKER
+  LOCATION
+  CONTACT
+}
+
+enum MessageStatus {
+  PENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
 model User {
   id        String   @id @default(cuid())
   name      String
@@ -28,21 +61,27 @@ model User {
   email     String?
 
   outlet Outlet? @relation(fields: [outletId], references: [id])
+  blasts Blast[] // Add relation to Blast
 
   @@map("users")
 }
 
 model Outlet {
   id              String   @id @default(cuid())
-  namaOutlet      String   @map("nama_outlet")
+  namaOutlet      String
   alamat          String
-  telepon         String
-  whatsappNumber  String   @map("whatsapp_number")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  whatsappNumber  String
+  isWhatsappActive Boolean @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  users     User[]
-  customers Customer[]
+  // Relations
+  customers       Customer[]
+  users          User[]
+  whatsappSessions WhatsappSession[]
+  messages       Message[]
+  blasts         Blast[]
+  messageTemplates MessageTemplate[]
 
   @@map("outlets")
 }
@@ -55,8 +94,10 @@ model Customer {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  outlet Outlet @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  outlet   Outlet    @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  messages Message[]
 
+  @@unique([noWa, outletId]) // Prevent duplicate phone numbers per outlet
   @@map("customers")
 }
 
@@ -68,11 +109,19 @@ model Blast {
   failedCount  Int
   createdAt    DateTime @default(now()) @map("created_at")
   userId       String
+  outletId     String   @map("outlet_id") // Add outlet relation
   
-  // Relasi (opsional, bisa ditambahkan jika perlu)
-  // user         User     @relation(fields: [userId], references: [id])
+  // Enhanced fields for Baileys
+  title        String?
+  mediaUrl     String?  @map("media_url")
+  mediaType    String?  @map("media_type")
+  scheduledAt  DateTime? @map("scheduled_at")
+  completedAt  DateTime? @map("completed_at")
+  status       String   @default("draft") // draft, scheduled, sending, completed, failed
   
-  reports BlastReport[]
+  user         User     @relation(fields: [userId], references: [id])
+  outlet       Outlet   @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  reports      BlastReport[]
 
   @@map("blasts")
 }
@@ -83,7 +132,164 @@ model BlastReport {
   blast          Blast    @relation(fields: [blastId], references: [id], onDelete: Cascade)
   customerId     String
   customerName   String
-  status         String // "sent" or "failed"
+  customerPhone  String   @map("customer_phone") // Add phone for tracking
+  status         String   // "sent", "failed", "delivered", "read"
+  sentAt         DateTime? @map("sent_at")
+  deliveredAt    DateTime? @map("delivered_at")
+  readAt         DateTime? @map("read_at")
+  errorMessage   String?   @map("error_message")
+  waMessageId    String?   @map("wa_message_id") // WhatsApp message ID
   
   @@map("blast_reports")
+}
+
+model WhatsappSession {
+  id            String         @id @default(cuid())
+  outletId      String
+  outlet        Outlet         @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  
+  // Enhanced Baileys fields
+  sessionId     String         @unique @map("session_id") // Baileys session identifier
+  phoneNumber   String
+  sessionName   String?
+  qrCode        String?        @db.Text
+  status        WhatsappStatus @default(DISCONNECTED)
+  lastSeen      DateTime?
+  connectedAt   DateTime?      @map("connected_at")
+  
+  // Provider info
+  apiProvider   String         @default("baileys") // fonnte, wablas, baileys, official
+  apiToken      String?
+  webhookUrl    String?
+  
+  // Baileys specific
+  sessionData   Json?          @map("session_data") // Store Baileys auth state
+  deviceInfo    Json?          @map("device_info")  // Device information
+  
+  // Auto-reconnection settings
+  autoReconnect Boolean        @default(true) @map("auto_reconnect")
+  maxRetries    Int            @default(3) @map("max_retries")
+  retryCount    Int            @default(0) @map("retry_count")
+  
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  // Relations
+  messages      Message[]
+
+  @@unique([outletId, phoneNumber])
+  @@map("whatsapp_sessions")
+}
+
+model Message {
+  id                String           @id @default(cuid())
+  outletId          String           @map("outlet_id")
+  outlet            Outlet           @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  whatsappSessionId String           @map("whatsapp_session_id")
+  whatsappSession   WhatsappSession  @relation(fields: [whatsappSessionId], references: [id], onDelete: Cascade)
+  customerId        String?          @map("customer_id")
+  customer          Customer?        @relation(fields: [customerId], references: [id])
+  
+  // Message content
+  content           String           @db.Text
+  messageType       MessageType      @default(TEXT) @map("message_type")
+  mediaUrl          String?          @map("media_url")
+  mediaType         String?          @map("media_type")
+  
+  // WhatsApp specific
+  waMessageId       String?          @map("wa_message_id") // WhatsApp message ID
+  waMessageKey      Json?            @map("wa_message_key") // WhatsApp message key
+  
+  // Status tracking
+  status            MessageStatus    @default(PENDING)
+  sentAt            DateTime?        @map("sent_at")
+  deliveredAt       DateTime?        @map("delivered_at")
+  readAt            DateTime?        @map("read_at")
+  failedAt          DateTime?        @map("failed_at")
+  errorMessage      String?          @map("error_message")
+  
+  // Direction
+  direction         MessageDirection @default(OUTBOUND)
+  
+  // Group messaging
+  isGroup           Boolean          @default(false) @map("is_group")
+  groupId           String?          @map("group_id")
+  groupName         String?          @map("group_name")
+  
+  // Metadata
+  metadata          Json?
+  
+  createdAt         DateTime         @default(now()) @map("created_at")
+  updatedAt         DateTime         @updatedAt @map("updated_at")
+
+  @@index([outletId, createdAt])
+  @@index([customerId, createdAt])
+  @@index([status])
+  @@index([direction])
+  @@map("messages")
+}
+
+// New model for message queue (for batch sending)
+model MessageQueue {
+  id          String        @id @default(cuid())
+  outletId    String        @map("outlet_id")
+  sessionId   String        @map("session_id")
+  
+  // Message details
+  phoneNumber String        @map("phone_number")
+  content     String        @db.Text
+  messageType MessageType   @default(TEXT) @map("message_type")
+  mediaUrl    String?       @map("media_url")
+  mediaType   String?       @map("media_type")
+  
+  // Queue management
+  priority    Int           @default(0) // Higher number = higher priority
+  attempts    Int           @default(0)
+  maxAttempts Int           @default(3) @map("max_attempts")
+  scheduledAt DateTime      @default(now()) @map("scheduled_at")
+  processedAt DateTime?     @map("processed_at")
+  failedAt    DateTime?     @map("failed_at")
+  
+  // Status
+  status      String        @default("pending") // pending, processing, sent, failed
+  errorMessage String?      @map("error_message")
+  
+  // Metadata
+  metadata    Json?
+  blastId     String?       @map("blast_id") // Link to blast if part of broadcast
+  
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  @@index([status, scheduledAt])
+  @@index([sessionId, status])
+  @@index([outletId])
+  @@map("message_queue")
+}
+
+// Message template model
+model MessageTemplate {
+  id          String   @id @default(cuid())
+  outletId    String   @map("outlet_id")
+  outlet      Outlet   @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  
+  name        String   // Template name (e.g., "Promo Ramadan", "Reminder Appointment")
+  content     String   @db.Text
+  category    String?  // Category for organizing templates
+  description String?  @db.Text
+  
+  // Template variables (for dynamic content)
+  // e.g., {customer_name}, {phone_number}, {date}
+  variables   Json?    @default("[]") // JSON array of variable names
+  
+  // Metadata
+  isActive    Boolean  @default(true)
+  usageCount  Int      @default(0) @map("usage_count")
+  
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  
+  @@index([outletId, isActive])
+  @@index([category])
+  @@map("message_templates")
 }

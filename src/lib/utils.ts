@@ -1,6 +1,16 @@
-import { ulid } from 'ulid'
-
-export const generateULID = () => ulid()
+// Lightweight ULID-like generator to avoid external dependency
+const ULID_CHARS = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
+export const generateULID = () => {
+  // Not a strict ULID implementation; good enough for unique IDs in this app
+  const now = Date.now()
+  let id = now.toString(32).toUpperCase()
+  while (id.length < 10) id = '0' + id
+  let randomPart = ''
+  for (let i = 0; i < 16; i++) {
+    randomPart += ULID_CHARS[Math.floor(Math.random() * ULID_CHARS.length)]
+  }
+  return (id + randomPart).slice(0, 26)
+}
 
 export const isValidULID = (id: string): boolean => {
   return /^[0123456789ABCDEFGHJKMNPQRSTVWXYZ]{26}$/.test(id)

@@ -1,11 +1,12 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useSession } from 'next-auth/react'
 import { Outlet } from '@prisma/client'
 import AuthenticatedLayout from '@/components/AuthenticatedLayout'
 import OutletModal from '@/components/modals/OutletModal'
 import DeleteConfirmModal from '@/components/modals/DeleteConfirmModal'
+import ConnectionModal from '@/components/modals/ConnectionModal'
 
 type OutletWithCounts = Outlet & {
   _count?: {
@@ -13,11 +14,13 @@ type OutletWithCounts = Outlet & {
     customers: number
   }
 }
+type OutletWithStatus = OutletWithCounts & { connectionStatus?: string }
 
 export default function OutletsPage() {
   const { data: session } = useSession()
   const [outlets, setOutlets] = useState<OutletWithCounts[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   
   // Modal states
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -31,6 +34,10 @@ export default function OutletsPage() {
 
   // Toast notification
   const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info', message: string } | null>(null)
+
+  // Connection Modal
+  const [isConnectionModalOpen, setIsConnectionModalOpen] = useState(false)
+  const [selectedOutletForConnection, setSelectedOutletForConnection] = useState<Outlet | null>(null)
 
   const fetchOutlets = async () => {
     try {
@@ -51,6 +58,17 @@ export default function OutletsPage() {
 
   useEffect(() => {
     fetchOutlets()
+    
+    // Setup polling to refresh outlets every 5 seconds
+    pollIntervalRef.current = setInterval(() => {
+      fetchOutlets()
+    }, 5000)
+    
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current)
+      }
+    }
   }, [])
 
   const showToast = (type: 'success' | 'error' | 'info', message: string) => {
@@ -73,6 +91,11 @@ export default function OutletsPage() {
   const handleDeleteOutlet = (outlet: Outlet) => {
     setOutletToDelete(outlet)
     setIsDeleteModalOpen(true)
+  }
+
+  const handleManageConnection = (outlet: Outlet) => {
+    setSelectedOutletForConnection(outlet)
+    setIsConnectionModalOpen(true)
   }
 
   const handleSaveOutlet = async (outletData: any) => {
@@ -108,6 +131,37 @@ export default function OutletsPage() {
     }
   }
 
+  const handleRefreshStatus = async (outlet: Outlet) => {
+    try {
+      showToast('info', 'Menyinkronkan status WhatsApp...')
+      
+      const response = await fetch('/api/outlets/sync-status', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ outletId: outlet.id }),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        await fetchOutlets()
+        
+        // Use the descriptive message from API instead of just the status
+        const toastType = data.status === 'CONNECTED' ? 'success' : 
+                         data.status === 'CONNECTING' ? 'info' : 
+                         'error'
+        showToast(toastType, data.message || `Status: ${data.status}`)
+      } else {
+        const error = await response.json()
+        showToast('error', error.error || 'Gagal menyinkronkan status')
+      }
+    } catch (error) {
+      console.error('Error refreshing status:', error)
+      showToast('error', 'Terjadi kesalahan saat menyinkronkan status')
+    }
+  }
+
   const confirmDeleteOutlet = async () => {
     if (!outletToDelete) return
 
@@ -135,7 +189,7 @@ export default function OutletsPage() {
   }
 
   // Check if user is SUPERADMIN
-  const isSuperAdmin = session?.user?.role === 'SUPERADMIN'
+  const userRole = session?.user?.role;
 
   return (
     <AuthenticatedLayout>
@@ -152,7 +206,7 @@ export default function OutletsPage() {
                 Manajemen lokasi outlet dan nomor WhatsApp untuk marketing
               </p>
             </div>
-            {isSuperAdmin && (
+            {userRole === 'SUPERADMIN' && (
               <button 
                 className="btn btn-primary btn-lg"
                 onClick={handleCreateOutlet}
@@ -208,10 +262,6 @@ export default function OutletsPage() {
                         Alamat
                       </th>
                       <th>
-                        <i className="fas fa-phone me-2 text-primary"></i>
-                        Telepon
-                      </th>
-                      <th>
                         <i className="fab fa-whatsapp me-2 text-success"></i>
                         WhatsApp
                       </th>
@@ -222,6 +272,10 @@ export default function OutletsPage() {
                       <th>
                         <i className="fas fa-address-book me-2 text-secondary"></i>
                         Customers
+                      </th>
+                      <th>
+                        <i className="fas fa-signal me-2 text-info"></i>
+                        Status
                       </th>
                       <th>
                         <i className="fas fa-cogs me-2 text-dark"></i>
@@ -264,12 +318,6 @@ export default function OutletsPage() {
                             </div>
                           </td>
                           <td>
-                            <a href={`tel:${outlet.telepon}`} className="text-decoration-none">
-                              <i className="fas fa-phone me-1 text-primary"></i>
-                              {outlet.telepon}
-                            </a>
-                          </td>
-                          <td>
                             <a 
                               href={`https://wa.me/${outlet.whatsappNumber.replace(/\D/g, '')}`}
                               target="_blank"
@@ -293,26 +341,42 @@ export default function OutletsPage() {
                             </span>
                           </td>
                           <td>
+                            {outlet.isWhatsappActive ? (
+                              <span className="badge bg-success-subtle text-success px-3 py-2">
+                                <i className="fas fa-circle text-success me-2"></i>
+                                Online
+                              </span>
+                            ) : (
+                              <span className="badge bg-light text-dark px-3 py-2">
+                                <i className="fas fa-circle text-secondary me-2"></i>
+                                Offline
+                              </span>
+                            )}
+                          </td>
+                          <td>
                             <div className="btn-group">
-                              {isSuperAdmin && (
-                                <button 
-                                  className="btn btn-sm btn-outline-primary" 
-                                  title="Edit Outlet"
-                                  onClick={() => handleEditOutlet(outlet)}
-                                >
-                                  <i className="fas fa-edit"></i>
-                                </button>
-                              )}
-                              <a
-                                href={`https://wa.me/${outlet.whatsappNumber.replace(/\D/g, '')}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="btn btn-sm btn-outline-success"
-                                title="Contact WhatsApp"
+                              <button
+                                className="btn btn-sm btn-outline-primary"
+                                title="Edit Outlet"
+                                onClick={() => handleEditOutlet(outlet)}
                               >
-                                <i className="fab fa-whatsapp"></i>
-                              </a>
-                              {isSuperAdmin && (
+                                <i className="fas fa-edit"></i>
+                              </button>
+                              <button
+                                className="btn btn-sm btn-outline-info"
+                                title="Refresh Status WhatsApp"
+                                onClick={() => handleRefreshStatus(outlet)}
+                              >
+                                <i className="fas fa-sync-alt"></i>
+                              </button>
+                              <button
+                                className="btn btn-sm btn-outline-success"
+                                title="Kelola Koneksi WhatsApp"
+                                onClick={() => handleManageConnection(outlet)}
+                              >
+                                <i className="fas fa-qrcode"></i>
+                              </button>
+                              {userRole === 'SUPERADMIN' && (
                                 <button 
                                   className="btn btn-sm btn-outline-danger" 
                                   title="Delete Outlet"
@@ -350,7 +414,7 @@ export default function OutletsPage() {
       </div>
 
       {/* Outlet Modal */}
-      {isSuperAdmin && (
+      {(userRole === 'SUPERADMIN' || userRole === 'ADMIN' || userRole === 'USER') && (
         <OutletModal
           isOpen={isModalOpen}
           onClose={() => setIsModalOpen(false)}
@@ -360,8 +424,23 @@ export default function OutletsPage() {
         />
       )}
 
+      {/* Connection Modal */}
+      {(userRole === 'SUPERADMIN' || userRole === 'ADMIN' || userRole === 'USER') && selectedOutletForConnection && (
+        <ConnectionModal
+          isOpen={isConnectionModalOpen}
+          onClose={() => {
+            setIsConnectionModalOpen(false)
+            // Refresh outlets after connection modal closes to see updated status
+            setTimeout(() => {
+              fetchOutlets()
+            }, 500)
+          }}
+          outlet={selectedOutletForConnection}
+        />
+      )}
+
       {/* Delete Confirmation Modal */}
-      {isSuperAdmin && (
+      {userRole === 'SUPERADMIN' && (
         <DeleteConfirmModal
           isOpen={isDeleteModalOpen}
           onClose={() => {

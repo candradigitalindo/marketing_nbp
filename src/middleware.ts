@@ -1,65 +1,46 @@
-import { withAuth } from "next-auth/middleware"
-import { NextResponse } from "next/server"
+import { withAuth } from 'next-auth/middleware'
+import { NextResponse } from 'next/server'
 
 export default withAuth(
+  // `withAuth` akan memperkaya `req` dengan `token` jika pengguna sudah login
   function middleware(req) {
+    const { token } = req.nextauth
     const { pathname } = req.nextUrl
-    const token = req.nextauth.token
 
-    // Redirect to login if not authenticated (except for login page)
-    if (!token && pathname !== "/login") {
-      return NextResponse.redirect(new URL("/login", req.url))
+    // Rute yang dilindungi dan role yang diizinkan
+    const roleBasedRoutes: Record<string, string[]> = {
+      '/users': ['SUPERADMIN'],
+      // '/outlets' tidak lagi di sini, karena sekarang dapat diakses oleh semua role yang login.
+      // Logika untuk menampilkan data di halaman /outlets sudah diatur di API dan komponen halaman.
     }
 
-    // Redirect to dashboard if authenticated user tries to access login
-    if (token && pathname === "/login") {
-      return NextResponse.redirect(new URL("/dashboard", req.url))
-    }
+    // Temukan rute yang cocok dengan path saat ini
+    const protectedPath = Object.keys(roleBasedRoutes).find((p) =>
+      pathname.startsWith(p)
+    )
 
-    // Role-based access control
-    if (token) {
-      const userRole = token.role as string
+    if (protectedPath) {
+      const requiredRoles = roleBasedRoutes[protectedPath]
+      const userRole = token?.role as string
 
-      // SUPERADMIN access control
-      if (pathname.startsWith("/outlets") && userRole !== "SUPERADMIN") {
-        return NextResponse.redirect(new URL("/dashboard", req.url))
-      }
-
-      // API route protection
-      if (pathname.startsWith("/api/outlets") && userRole !== "SUPERADMIN") {
-        return NextResponse.json(
-          { error: "Unauthorized - SUPERADMIN access required" },
-          { status: 403 }
-        )
+      // Jika role pengguna tidak termasuk dalam role yang diizinkan, alihkan ke dashboard
+      if (!userRole || !requiredRoles.includes(userRole)) {
+        return NextResponse.redirect(new URL('/dashboard', req.url))
       }
     }
 
+    // Jika tidak ada aturan yang dilanggar, lanjutkan permintaan
     return NextResponse.next()
   },
   {
     callbacks: {
-      authorized: ({ token, req }) => {
-        // Allow access to login page without token
-        if (req.nextUrl.pathname === "/login") {
-          return true
-        }
-        // Require token for all other pages
-        return !!token
-      },
+      // Callback ini memastikan middleware hanya berjalan jika pengguna sudah terotentikasi
+      authorized: ({ token }) => !!token,
     },
   }
 )
 
+// Tentukan rute mana yang akan dilindungi oleh middleware
 export const config = {
-  matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - api/auth (NextAuth API routes)
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - public folder
-     */
-    "/((?!api/auth|_next/static|_next/image|favicon.ico|public).*)",
-  ],
+  matcher: ['/dashboard/:path*', '/outlets/:path*', '/customers/:path*', '/users/:path*', '/blast/:path*'],
 }

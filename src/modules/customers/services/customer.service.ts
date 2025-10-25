@@ -135,27 +135,35 @@ export class CustomerService {
   }
 
   async getCustomersForBlast(userRole: string, userOutletId?: string | null, outletIds?: string[]) {
+    console.log(`[CustomerService] getCustomersForBlast - role: ${userRole}, userOutletId: ${userOutletId}, outletIds: ${outletIds?.join(',')}`)
+    
     if (userRole === 'SUPERADMIN') {
       // SUPERADMIN can access all customers
       if (outletIds && outletIds.length > 0) {
+        console.log(`[CustomerService] SUPERADMIN fetching customers from ${outletIds.length} outlets`)
         return await this.customerRepository.findByOutletIds(outletIds)
       }
+      console.log(`[CustomerService] SUPERADMIN fetching all customers`)
       return await this.customerRepository.findAll()
     }
 
     if (userRole === 'ADMIN') {
       // ADMIN can access all customers or filter by outlets
       if (outletIds && outletIds.length > 0) {
+        console.log(`[CustomerService] ADMIN fetching customers from ${outletIds.length} outlets`)
         return await this.customerRepository.findByOutletIds(outletIds)
       }
+      console.log(`[CustomerService] ADMIN fetching all customers`)
       return await this.customerRepository.findAll()
     }
 
     if (userRole === 'USER' && userOutletId) {
       // USER can only access customers from their outlet
+      console.log(`[CustomerService] USER fetching customers from their outlet ${userOutletId}`)
       return await this.customerRepository.findAll({ outletId: userOutletId })
     }
 
+    console.error(`[CustomerService] Access denied for role: ${userRole}`)
     throw new Error('Access denied')
   }
 }

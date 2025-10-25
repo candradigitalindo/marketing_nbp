@@ -10,7 +10,7 @@ export default function Navbar() {
 
   const menuItems = [
     { href: '/dashboard', label: 'Dashboard', icon: 'fas fa-tachometer-alt' },
-    { href: '/outlets', label: 'Outlets', icon: 'fas fa-store', roles: ['SUPERADMIN', 'ADMIN'] },
+    { href: '/outlets', label: 'Outlets', icon: 'fas fa-store' }, // Now visible to all roles
     { href: '/customers', label: 'Customers', icon: 'fas fa-users' },
     { href: '/users', label: 'Pengguna', icon: 'fas fa-users-cog', roles: ['SUPERADMIN'] },
   ]

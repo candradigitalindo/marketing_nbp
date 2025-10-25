@@ -3,6 +3,12 @@ import { OutletRepository } from '../../outlets/repositories/outlet.repository'
 import { WhatsAppRepository } from '../repositories/whatsapp.repository'
 import { BlastRequest, BlastResult, BlastTarget, QRScanResult } from '../types'
 
+interface MediaFile {
+  buffer: Buffer
+  fileName: string
+  mimetype: string
+}
+
 export class WhatsAppService {
   private customerService: CustomerService
   private outletRepository: OutletRepository
@@ -17,13 +23,22 @@ export class WhatsAppService {
   async sendBlast(
     request: BlastRequest,
     userRole: string,
-    userOutletId?: string | null
+    userOutletId?: string | null,
+    mediaFiles?: MediaFile[],
+    sendMode: 'separate' | 'caption' = 'separate'
   ): Promise<BlastResult> {
     try {
+      console.log(`[BlastService] Starting blast from user role: ${userRole}, outletId: ${userOutletId}`)
+      console.log(`[BlastService] Request - outletIds: ${request.outletIds?.join(',')} | customerIds: ${request.customerIds?.join(',')}`)
+      console.log(`[BlastService] Message preview: ${request.message.substring(0, 100)}...`)
+      console.log(`[BlastService] Send mode: ${sendMode}, Media files: ${mediaFiles?.length || 0}`)
+      
       // Get target customers based on role and filters
       const customers = await this.getBlastTargets(request, userRole, userOutletId)
+      console.log(`[BlastService] Found ${customers.length} target customers`)
       
       if (customers.length === 0) {
+        console.warn(`[BlastService] No customers found for blast`)
         return {
           success: false,
           message: 'No customers found for blast',
@@ -33,6 +48,13 @@ export class WhatsAppService {
           results: [],
         }
       }
+
+      // Log customer details
+      const groupedByOutlet = this.groupCustomersByOutlet(customers)
+      console.log(`[BlastService] Customers grouped into ${Object.keys(groupedByOutlet).length} outlets:`)
+      Object.values(groupedByOutlet).forEach((outlet: any) => {
+        console.log(`  - ${outlet.outletName}: ${outlet.customers.length} customers`)
+      })
 
       // Prepare blast targets
       const targets: BlastTarget[] = customers.map((customer: any) => ({
@@ -44,11 +66,20 @@ export class WhatsAppService {
         senderWhatsappNumber: customer.outlet.whatsappNumber,
       }))
 
-      // Send messages
-      const results = await this.whatsappRepository.sendBulkMessages(targets, request.message)
+      console.log(`[BlastService] Starting to send ${targets.length} messages`)
+
+      // Send messages (with media if provided)
+      const results = await this.whatsappRepository.sendBulkMessages(
+        targets, 
+        request.message,
+        mediaFiles,
+        sendMode
+      )
       
       const sentCount = results.filter(r => r.success).length
       const failedCount = results.filter(r => !r.success).length
+
+      console.log(`[BlastService] Blast completed - Sent: ${sentCount}, Failed: ${failedCount}, Total: ${targets.length}`)
 
       return {
         success: sentCount > 0,
@@ -59,7 +90,7 @@ export class WhatsAppService {
         results,
       }
     } catch (error) {
-      console.error('Error in WhatsApp blast:', error)
+      console.error('[BlastService] Error in WhatsApp blast:', error)
       throw error
     }
   }
@@ -90,12 +121,19 @@ export class WhatsAppService {
       return []
     }
 
+    console.log('🔍 getBlastTargets - outletIds:', request.outletIds)
+    console.log('🔍 getBlastTargets - userRole:', userRole)
+    console.log('🔍 getBlastTargets - userOutletId:', userOutletId)
+
     // Get customers based on role and outlet filters
-    return await this.customerService.getCustomersForBlast(
+    const targets = await this.customerService.getCustomersForBlast(
       userRole,
       userOutletId,
       request.outletIds
     )
+
+    console.log('🔍 getBlastTargets - found customers:', targets.length)
+    return targets
   }
 
   private groupCustomersByOutlet(customers: any[]) {

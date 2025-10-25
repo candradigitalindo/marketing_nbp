@@ -2,8 +2,8 @@
 
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
-import { useEffect } from 'react'
-import Navbar from '@/components/Navbar'
+import { useEffect, Fragment } from 'react'
+import Navbar from './Navbar'
 
 interface AuthenticatedLayoutProps {
   children: React.ReactNode
@@ -40,11 +40,11 @@ export default function AuthenticatedLayout({ children }: AuthenticatedLayoutPro
   }
 
   return (
-    <>
+    <Fragment>
       <Navbar />
       <div className="main-content-wrapper">
         {children}
       </div>
-    </>
+    </Fragment>
   )
 }

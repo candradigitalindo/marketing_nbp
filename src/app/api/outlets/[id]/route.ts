@@ -17,17 +17,29 @@ export async function PUT(request: NextRequest, { params }: Params) {
   const session = await getServerSession(authOptions)
   const { id } = params
 
-  if (!session || session.user.role !== 'SUPERADMIN') {
+  if (!session?.user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const { user } = session
+
+  // Authorization check:
+  // SUPERADMIN can update any outlet.
+  // USER can only update their own outlet.
+  if (user.role !== 'SUPERADMIN') {
+    if (user.role !== 'USER' || user.outletId !== id) {
+      // Deny access if not SUPERADMIN, or if USER is trying to edit someone else's outlet.
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
   }
 
   try {
     const body = await request.json()
-    const { namaOutlet, alamat, telepon, whatsappNumber } = body
+    const { namaOutlet, alamat, whatsappNumber } = body
 
     const updatedOutlet = await prisma.outlet.update({
       where: { id },
-      data: { namaOutlet, alamat, telepon, whatsappNumber },
+      data: { namaOutlet, alamat, whatsappNumber },
     })
 
     return NextResponse.json({ outlet: updatedOutlet })
@@ -48,8 +60,20 @@ export async function DELETE(request: NextRequest, { params }: Params) {
   const session = await getServerSession(authOptions)
   const { id } = params
 
-  if (!session || session.user.role !== 'SUPERADMIN') {
+  if (!session?.user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const { user } = session
+
+  // Authorization check:
+  // SUPERADMIN can update any outlet.
+  // USER can only update their own outlet.
+  if (user.role !== 'SUPERADMIN') {
+    if (user.role !== 'USER' || user.outletId !== id) {
+      // Deny access if not SUPERADMIN, or if USER is trying to edit someone else's outlet.
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
   }
 
   try {

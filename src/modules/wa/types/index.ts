@@ -32,8 +32,8 @@ export interface BlastTargetResult {
 }
 
 export interface QRScanResult {
-  qrCode: string
+  qrCode?: string | null
   whatsappNumber: string
-  deviceStatus: 'connected' | 'disconnected' | 'scanning'
+  deviceStatus: 'connected' | 'disconnected' | 'connecting'
   lastSeen?: Date
 }

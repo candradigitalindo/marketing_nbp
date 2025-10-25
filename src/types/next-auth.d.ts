@@ -13,7 +13,6 @@ declare module 'next-auth' {
       id: string
       namaOutlet: string
       alamat: string
-      telepon: string
       whatsappNumber: string
     } | null
   }
@@ -30,7 +29,6 @@ declare module 'next-auth' {
         id: string
         namaOutlet: string
         alamat: string
-        telepon: string
         whatsappNumber: string
       } | null
     }
@@ -46,7 +44,6 @@ declare module 'next-auth/jwt' {
       id: string
       namaOutlet: string
       alamat: string
-      telepon: string
       whatsappNumber: string
     } | null
   }

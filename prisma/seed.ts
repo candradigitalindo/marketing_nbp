@@ -22,7 +22,6 @@ async function main() {
       data: {
         namaOutlet: 'Jakarta Pusat',
         alamat: 'Jl. Thamrin No. 123, Jakarta Pusat',
-        telepon: '+62 21 1234567',
         whatsappNumber: '+62 812 3456 7890'
       }
     }),
@@ -30,7 +29,6 @@ async function main() {
       data: {
         namaOutlet: 'Bandung Center',
         alamat: 'Jl. Braga No. 45, Bandung',
-        telepon: '+62 22 9876543',
         whatsappNumber: '+62 822 9876 5432'
       }
     }),
@@ -38,7 +36,6 @@ async function main() {
       data: {
         namaOutlet: 'Surabaya Mall',
         alamat: 'Jl. Pemuda No. 67, Surabaya',
-        telepon: '+62 31 5555666',
         whatsappNumber: '+62 831 5555 6666'
       }
     }),
@@ -46,7 +43,6 @@ async function main() {
       data: {
         namaOutlet: 'Medan Plaza',
         alamat: 'Jl. Guru Patimpus No. 89, Medan',
-        telepon: '+62 61 7777888',
         whatsappNumber: '+62 821 7777 8888'
       }
     }),
@@ -54,7 +50,6 @@ async function main() {
       data: {
         namaOutlet: 'Yogya Heritage',
         alamat: 'Jl. Malioboro No. 12, Yogyakarta',
-        telepon: '+62 274 9999000',
         whatsappNumber: '+62 812 9999 0000'
       }
     })
