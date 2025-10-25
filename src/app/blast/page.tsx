@@ -398,8 +398,8 @@ Karakter: ${message.length}/4000
                           <small className="fw-semibold">Lampiran ({attachedFiles.length})</small>
                         </div>
                         
-                        {/* Send Mode Selector - Only show if there are images and message */}
-                        {attachedFiles.some(f => f.type === 'image') && message.trim() && (
+                        {/* Send Mode Selector - Show if there are any files (images or documents) and message */}
+                        {attachedFiles.length > 0 && message.trim() && (
                           <div className="btn-group btn-group-sm" role="group">
                             <input
                               type="radio"
@@ -409,7 +409,7 @@ Karakter: ${message.length}/4000
                               checked={sendMode === 'separate'}
                               onChange={() => setSendMode('separate')}
                             />
-                            <label className="btn btn-outline-primary" htmlFor="mode-separate" title="Kirim teks terlebih dahulu, kemudian gambar">
+                            <label className="btn btn-outline-primary" htmlFor="mode-separate" title="Kirim teks terlebih dahulu, kemudian file">
                               <i className="fas fa-list me-1"></i>
                               Terpisah
                             </label>
@@ -422,8 +422,8 @@ Karakter: ${message.length}/4000
                               checked={sendMode === 'caption'}
                               onChange={() => setSendMode('caption')}
                             />
-                            <label className="btn btn-outline-success" htmlFor="mode-caption" title="Teks menjadi caption gambar">
-                              <i className="fas fa-image me-1"></i>
+                            <label className="btn btn-outline-success" htmlFor="mode-caption" title="Teks menjadi caption file pertama">
+                              <i className="fas fa-paperclip me-1"></i>
                               Caption
                             </label>
                           </div>
@@ -431,16 +431,16 @@ Karakter: ${message.length}/4000
                       </div>
                       
                       {/* Mode Description */}
-                      {attachedFiles.some(f => f.type === 'image') && message.trim() && (
+                      {attachedFiles.length > 0 && message.trim() && (
                         <div className="alert alert-info py-2 px-3 mb-2" style={{ fontSize: '0.75rem' }}>
                           <i className="fas fa-info-circle me-1"></i>
                           {sendMode === 'separate' ? (
                             <span>
-                              <strong>Mode Terpisah:</strong> Pesan teks dikirim terlebih dahulu, kemudian gambar/file dikirim terpisah.
+                              <strong>Mode Terpisah:</strong> Pesan teks dikirim terlebih dahulu, kemudian file dikirim terpisah.
                             </span>
                           ) : (
                             <span>
-                              <strong>Mode Caption:</strong> Teks menjadi caption (keterangan) dari gambar yang dikirim.
+                              <strong>Mode Caption:</strong> Teks menjadi caption file pertama. {attachedFiles.some(f => f.type === 'image') ? 'Gambar' : 'Dokumen'} pertama akan memiliki caption, file selanjutnya tanpa caption.
                             </span>
                           )}
                         </div>

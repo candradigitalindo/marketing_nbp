@@ -1144,7 +1144,7 @@ class BaileysService {
       await new Promise(r => setTimeout(r, 500))
 
       const jid = toJid(toPhone)
-      console.log(`[Blast] Sending document to ${jid}`)
+      console.log(`[Blast] Sending document to ${jid}${caption ? ` with caption: "${caption.substring(0, 50)}..."` : ''}`)
 
       await sock.sendMessage(jid, {
         document: documentBuffer,
