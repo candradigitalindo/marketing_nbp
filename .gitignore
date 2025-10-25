@@ -31,7 +31,10 @@ yarn-error.log*
 .pnpm-debug.log*
 
 # env files (can opt-in for committing if needed)
-.env*
+.env
+.env*.local
+!.env.example
+!.env.production
 
 # vercel
 .vercel
@@ -40,4 +43,18 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+
 /src/generated/prisma
+
+# WhatsApp sessions
+sessions/
+*.session.json
+
+# PM2 logs and runtime
+logs/
+*.log
+.pm2/
+
+# Docker
+.docker/
+docker-compose.override.yml
