@@ -69,11 +69,11 @@ export default function OutletModal({
       // No check result yet - ask user to verify first
       newErrors.whatsappNumber = 'Silakan klik tombol Check untuk verifikasi nomor'
     } else if (!numberCheckResult.valid && numberCheckResult.exists === false && 
-               !numberCheckResult.message.includes('format valid') &&
-               !numberCheckResult.message.includes('Silakan hubungkan') &&
-               !numberCheckResult.message.includes('coba manual')) {
+               !numberCheckResult.message?.includes('format valid') &&
+               !numberCheckResult.message?.includes('Silakan hubungkan') &&
+               !numberCheckResult.message?.includes('coba manual')) {
       // Only block if explicitly not found on WhatsApp
-      newErrors.whatsappNumber = numberCheckResult.message
+      newErrors.whatsappNumber = numberCheckResult.message || 'Nomor tidak valid'
     }
 
     setErrors(newErrors)
@@ -250,9 +250,9 @@ export default function OutletModal({
                     <div className={`mt-2 alert border-0 py-2 px-3 ${
                       numberCheckResult.exists 
                         ? 'alert-success' 
-                        : (numberCheckResult.message.includes('format valid') || 
-                           numberCheckResult.message.includes('Silakan hubungkan') ||
-                           numberCheckResult.message.includes('coba manual'))
+                        : (numberCheckResult.message?.includes('format valid') || 
+                           numberCheckResult.message?.includes('Silakan hubungkan') ||
+                           numberCheckResult.message?.includes('coba manual'))
                         ? 'alert-info'
                         : 'alert-warning'
                     }`}>
@@ -260,8 +260,8 @@ export default function OutletModal({
                         <i className={`fas ${
                           numberCheckResult.exists 
                             ? 'fa-check-circle' 
-                            : (numberCheckResult.message.includes('format valid') || 
-                               numberCheckResult.message.includes('Silakan hubungkan'))
+                            : (numberCheckResult.message?.includes('format valid') || 
+                               numberCheckResult.message?.includes('Silakan hubungkan'))
                             ? 'fa-info-circle'
                             : 'fa-exclamation-triangle'
                         } me-2`}></i>
@@ -269,7 +269,7 @@ export default function OutletModal({
                       </small>
                       
                       {/* Show guidance when no WhatsApp session is connected */}
-                      {numberCheckResult.message.includes('Silakan hubungkan') && (
+                      {numberCheckResult.message?.includes('Silakan hubungkan') && (
                         <div className="mt-2 pt-2 border-top border-info border-opacity-50">
                           <small className="d-block mb-2">
                             <strong>💡 Solusi:</strong> Silakan hubungkan akun WhatsApp Anda terlebih dahulu di halaman Outlets sebelum melakukan verifikasi nomor.

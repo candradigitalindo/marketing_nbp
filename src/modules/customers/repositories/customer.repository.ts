@@ -149,4 +149,42 @@ export class CustomerRepository {
       },
     })
   }
+
+  async findByIds(customerIds: string[], outletId?: string) {
+    const where: any = {
+      id: {
+        in: customerIds,
+      },
+    }
+
+    // If outletId provided, filter by outlet (for USER role)
+    if (outletId) {
+      where.outletId = outletId
+    }
+
+    return await prisma.customer.findMany({
+      where,
+      include: {
+        outlet: {
+          select: {
+            id: true,
+            namaOutlet: true,
+            whatsappNumber: true,
+          },
+        },
+      },
+    })
+  }
+
+  async validateCustomerAccess(customerIds: string[], outletId: string): Promise<boolean> {
+    // Check if all customers belong to the specified outlet
+    const count = await prisma.customer.count({
+      where: {
+        id: { in: customerIds },
+        outletId: outletId,
+      },
+    })
+
+    return count === customerIds.length
+  }
 }

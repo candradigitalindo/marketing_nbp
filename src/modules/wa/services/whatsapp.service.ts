@@ -114,26 +114,31 @@ export class WhatsAppService {
     userRole: string,
     userOutletId?: string | null
   ) {
-    if (request.customerIds && request.customerIds.length > 0) {
-      // Specific customers selected
-      // For now, we'll need to implement individual customer access check
-      // This would require updates to customer service
-      return []
-    }
-
+    console.log('🔍 getBlastTargets - customerIds:', request.customerIds?.length || 0)
     console.log('🔍 getBlastTargets - outletIds:', request.outletIds)
     console.log('🔍 getBlastTargets - userRole:', userRole)
     console.log('🔍 getBlastTargets - userOutletId:', userOutletId)
+    console.log('🔍 getBlastTargets - excludeCustomerIds:', request.excludeCustomerIds?.length || 0)
 
     // Get customers based on role and outlet filters
     const targets = await this.customerService.getCustomersForBlast(
       userRole,
       userOutletId,
-      request.outletIds
+      request.outletIds,
+      request.customerIds // Pass customerIds for validation
     )
 
-    console.log('🔍 getBlastTargets - found customers:', targets.length)
-    return targets
+    // Filter out excluded customers if provided
+    let filteredTargets = targets
+    if (request.excludeCustomerIds && request.excludeCustomerIds.length > 0) {
+      filteredTargets = targets.filter(
+        t => !request.excludeCustomerIds!.includes(t.id)
+      )
+      console.log(`🔍 getBlastTargets - filtered: ${targets.length} → ${filteredTargets.length} (excluded ${targets.length - filteredTargets.length})`)
+    }
+
+    console.log('🔍 getBlastTargets - found customers:', filteredTargets.length)
+    return filteredTargets
   }
 
   private groupCustomersByOutlet(customers: any[]) {

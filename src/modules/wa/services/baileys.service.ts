@@ -18,7 +18,7 @@ const TIMEOUTS = {
   SOCKET_WAIT: 1000,
   DB_SYNC: 500,
   RETRY_DELAY: 2000,
-  AUTO_RECONNECT: 3000,
+  AUTO_RECONNECT: 5000, // Increased from 3000 to 5000ms (5 seconds)
   RECONNECT_COOLDOWN: 30000, // 30 seconds between reconnect attempts
   CONFLICT_COOLDOWN: 60000, // 60 seconds for conflict errors (440)
   PHONE_CHECK: 12_000,
@@ -1016,8 +1016,9 @@ class BaileysService {
 
       // Wait for connection to be truly stable before sending media
       // This is critical when multiple devices are connected
+      console.log(`[Blast] Checking connection stability for media upload...`)
       let connectionReady = false
-      const maxWaitAttempts = 10
+      const maxWaitAttempts = 20 // 20 attempts = 6 seconds total
       
       for (let attempt = 0; attempt < maxWaitAttempts; attempt++) {
         // Re-fetch socket to get latest state
@@ -1027,9 +1028,16 @@ class BaileysService {
         }
         
         const currentUser = (sock as any)?.user
+        
+        // Check if user is authenticated (this means socket is ready)
         if (currentUser?.id) {
+          console.log(`[Blast] ✅ Connection stable (user: ${currentUser.id})`)
           connectionReady = true
           break
+        }
+        
+        if (attempt % 5 === 0) { // Log every 5 attempts
+          console.log(`[Blast] ⏳ Waiting for authentication (attempt ${attempt + 1}/${maxWaitAttempts})...`)
         }
         
         // Wait before retry
@@ -1037,11 +1045,24 @@ class BaileysService {
       }
       
       if (!connectionReady) {
-        throw new Error('Connection not stable after waiting. Please try again.')
+        throw new Error('Connection not stable after 6 seconds. Socket is not authenticated.')
       }
       
-      // Additional stabilization delay for media
-      await new Promise(r => setTimeout(r, 500))
+      // Additional stabilization delay for media upload
+      console.log(`[Blast] Connection verified, waiting 2000ms for upload stability...`)
+      await new Promise(r => setTimeout(r, 2000))
+
+      // Final check - verify socket still exists
+      sock = this.sockets.get(outletId)
+      if (!sock) {
+        throw new Error(`Socket lost for outlet ${outletId}`)
+      }
+      
+      // Verify user still authenticated
+      const finalUser = (sock as any)?.user
+      if (!finalUser?.id) {
+        throw new Error(`Socket authentication lost for outlet ${outletId}`)
+      }
 
       const jid = toJid(toPhone)
       console.log(`[Blast] Sending image to ${jid}${caption ? ` with caption: "${caption.substring(0, 50)}..."` : ''}`)
@@ -1068,8 +1089,10 @@ class BaileysService {
 
       const isConnectionError = errorMsg.includes('Connection Closed') ||
         errorMsg.includes('Timeout') ||
-        errorMsg.includes('not open') ||
-        errorMsg.includes('WebSocket')
+        errorMsg.includes('not stable') ||
+        errorMsg.includes('not authenticated') ||
+        errorMsg.includes('authentication lost') ||
+        errorMsg.includes('Socket lost')
 
       if (isConnectionError && retryCount < maxRetries) {
         console.log(`[Blast] Retrying ${retryCount + 1}/${maxRetries} after ${TIMEOUTS.RETRY_DELAY}ms...`)
@@ -1119,8 +1142,9 @@ class BaileysService {
       }
 
       // Wait for connection to be truly stable before sending document
+      console.log(`[Blast] Checking connection stability for document upload...`)
       let connectionReady = false
-      const maxWaitAttempts = 10
+      const maxWaitAttempts = 20 // 20 attempts = 6 seconds
       
       for (let attempt = 0; attempt < maxWaitAttempts; attempt++) {
         sock = this.sockets.get(outletId)
@@ -1129,19 +1153,39 @@ class BaileysService {
         }
         
         const currentUser = (sock as any)?.user
+        
+        // Check if user is authenticated
         if (currentUser?.id) {
+          console.log(`[Blast] ✅ Connection stable (user: ${currentUser.id})`)
           connectionReady = true
           break
+        }
+        
+        if (attempt % 5 === 0) {
+          console.log(`[Blast] ⏳ Waiting for authentication (attempt ${attempt + 1}/${maxWaitAttempts})...`)
         }
         
         await new Promise(r => setTimeout(r, 300))
       }
       
       if (!connectionReady) {
-        throw new Error('Connection not stable after waiting. Please try again.')
+        throw new Error('Connection not stable after 6 seconds. Socket is not authenticated.')
       }
       
-      await new Promise(r => setTimeout(r, 500))
+      console.log(`[Blast] Connection verified, waiting 2000ms for upload stability...`)
+      await new Promise(r => setTimeout(r, 2000))
+
+      // Final check - verify socket still exists
+      sock = this.sockets.get(outletId)
+      if (!sock) {
+        throw new Error(`Socket lost for outlet ${outletId}`)
+      }
+      
+      // Verify user still authenticated
+      const finalUser = (sock as any)?.user
+      if (!finalUser?.id) {
+        throw new Error(`Socket authentication lost for outlet ${outletId}`)
+      }
 
       const jid = toJid(toPhone)
       console.log(`[Blast] Sending document to ${jid}${caption ? ` with caption: "${caption.substring(0, 50)}..."` : ''}`)
@@ -1170,8 +1214,10 @@ class BaileysService {
 
       const isConnectionError = errorMsg.includes('Connection Closed') ||
         errorMsg.includes('Timeout') ||
-        errorMsg.includes('not open') ||
-        errorMsg.includes('WebSocket')
+        errorMsg.includes('not stable') ||
+        errorMsg.includes('not authenticated') ||
+        errorMsg.includes('authentication lost') ||
+        errorMsg.includes('Socket lost')
 
       if (isConnectionError && retryCount < maxRetries) {
         console.log(`[Blast] Retrying ${retryCount + 1}/${maxRetries} after ${TIMEOUTS.RETRY_DELAY}ms...`)

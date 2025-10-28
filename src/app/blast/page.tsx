@@ -39,6 +39,17 @@ export default function BlastPage() {
   const [templates, setTemplates] = useState<MessageTemplate[]>([])
   const [templatesLoading, setTemplatesLoading] = useState(false)
   
+  // NEW: Real-time blast results
+  const [sentList, setSentList] = useState<any[]>([])
+  const [failedList, setFailedList] = useState<any[]>([])
+  // skipSentCustomers removed - hanya untuk resend dari histori
+  
+  // NEW: Blast History
+  const [blastHistory, setBlastHistory] = useState<any[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [showHistory, setShowHistory] = useState(false)
+  const [resendingId, setResendingId] = useState<string | null>(null) // NEW: Track which blast is being resent
+  
   // New states for WhatsApp-like features
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([])
@@ -183,10 +194,14 @@ export default function BlastPage() {
 
     setIsLoading(true)
     setBlastStatus('idle')
+    setSentList([]) // Reset sent list
+    setFailedList([]) // Reset failed list
+    
     try {
       const formData = new FormData()
       formData.append('message', message)
       formData.append('sendMode', sendMode) // Add send mode
+      // skipSentCustomers REMOVED - hanya untuk resend dari histori
       
       if (selectedOutlets.length > 0) {
         formData.append('outletIds', JSON.stringify(selectedOutlets))
@@ -236,7 +251,7 @@ export default function BlastPage() {
     }
   }
 
-  // NEW: Poll blast status
+  // NEW: Poll blast status with real-time updates
   const pollBlastStatus = async (blastId: string) => {
     const pollInterval = setInterval(async () => {
       try {
@@ -244,11 +259,20 @@ export default function BlastPage() {
         if (response.ok) {
           const data = await response.json()
           
-          setBlastStatus(data.status.toLowerCase())
-          setJobProgress(data.jobProgress || 0)
+          const blastData = data.blast || data
+          setBlastStatus(blastData.status?.toLowerCase() || 'unknown')
+          setJobProgress(data.job?.progress || 0)
+          
+          // Update sent and failed lists in real-time
+          if (data.sent) {
+            setSentList(data.sent)
+          }
+          if (data.failed) {
+            setFailedList(data.failed)
+          }
           
           // Stop polling when completed or failed
-          if (data.status === 'COMPLETED' || data.status === 'FAILED') {
+          if (blastData.status === 'COMPLETED' || blastData.status === 'FAILED') {
             clearInterval(pollInterval)
             setBlastResult(data)
             setCurrentBlastId(null)
@@ -297,6 +321,125 @@ Karakter: ${message.length}/4000
     alert(`✅ Draft tersimpan! (${message.length} karakter)`)
   }
 
+  // Fetch blast history
+  const fetchBlastHistory = async () => {
+    setHistoryLoading(true)
+    try {
+      const response = await fetch('/api/blast?limit=20')
+      if (response.ok) {
+        const data = await response.json()
+        setBlastHistory(data.blasts || [])
+      }
+    } catch (error) {
+      console.error('Error fetching blast history:', error)
+    } finally {
+      setHistoryLoading(false)
+    }
+  }
+
+  // Load history when modal opens
+  useEffect(() => {
+    if (showHistory) {
+      fetchBlastHistory()
+    }
+  }, [showHistory])
+
+  // Resend blast (hanya yang gagal)
+  const handleResend = async (blastItem: any) => {
+    console.log('🔄 Resend blast:', blastItem)
+    
+    // Check permission: USER can only resend from their outlet
+    if (session?.user?.role === 'USER' && blastItem.outletId !== session?.user?.outletId) {
+      alert('❌ Anda hanya bisa mengirim ulang blast dari outlet Anda sendiri')
+      return
+    }
+
+    if (!confirm(`Kirim ulang blast ke ${blastItem.failedCount} customer yang gagal?`)) {
+      return
+    }
+
+    setResendingId(blastItem.id) // Mark this blast as being resent
+    try {
+      console.log('📡 Fetching blast details:', blastItem.id)
+      // Get failed customer IDs from the blast
+      const response = await fetch(`/api/blast/${blastItem.id}`)
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('❌ Fetch failed:', response.status, errorText)
+        throw new Error('Failed to fetch blast details')
+      }
+      
+      const data = await response.json()
+      console.log('📊 Blast data:', data)
+      
+      const failedCustomerIds = data.failed?.map((r: any) => r.customerId) || []
+      console.log('❌ Failed customer IDs:', failedCustomerIds)
+      
+      if (failedCustomerIds.length === 0) {
+        alert('Tidak ada customer yang gagal')
+        setResendingId(null)
+        return
+      }
+
+      // Send blast to failed customers only
+      const formData = new FormData()
+      formData.append('message', blastItem.message)
+      formData.append('customerIds', JSON.stringify(failedCustomerIds))
+      formData.append('sendMode', blastItem.sendMode || 'separate')
+      formData.append('skipSentCustomers', 'true') // Skip customers yang sudah pernah terkirim
+      
+      // If resending from specific outlet, include outletId
+      if (blastItem.outletId) {
+        formData.append('outletIds', JSON.stringify([blastItem.outletId]))
+      }
+
+      console.log('📤 Sending blast request...')
+      console.log('  - Message length:', blastItem.message.length)
+      console.log('  - Customer IDs:', failedCustomerIds.length)
+      console.log('  - Send mode:', blastItem.sendMode || 'separate')
+      console.log('  - Outlet ID:', blastItem.outletId)
+
+      const sendResponse = await fetch('/api/blast', {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!sendResponse.ok) {
+        const error = await sendResponse.json()
+        console.error('❌ Send failed:', error)
+        throw new Error(error.error || 'Gagal mengirim blast')
+      }
+
+      const result = await sendResponse.json()
+      console.log('✅ Blast created:', result)
+      
+      setCurrentBlastId(result.blastId)
+      setBlastStatus('queued')
+      
+      // Close modal and stop loading IMMEDIATELY
+      setShowHistory(false)
+      setResendingId(null)
+      
+      // Show success alert
+      alert(`✅ Blast dijadwalkan untuk ${failedCustomerIds.length} customer yang gagal`)
+      
+      // Refresh history in background (after modal closed)
+      setTimeout(() => {
+        fetchBlastHistory().catch(err => {
+          console.error('Failed to refresh history:', err)
+        })
+      }, 100)
+      
+    } catch (error: any) {
+      console.error('❌ Resend error:', error)
+      setResendingId(null) // Stop loading on error too
+      alert(`❌ Error: ${error.message}`)
+    } finally {
+      // Double-ensure loading is stopped
+      setResendingId(null)
+    }
+  }
+
   return (
     <AuthenticatedLayout>
       <div className="main-content">
@@ -313,6 +456,13 @@ Karakter: ${message.length}/4000
               </p>
             </div>
             <div>
+              <button
+                className="btn btn-outline-primary me-2"
+                onClick={() => setShowHistory(true)}
+              >
+                <i className="fas fa-history me-2"></i>
+                Riwayat Blast
+              </button>
               <span className="badge bg-success-subtle text-success px-3 py-2">
                 <i className="fas fa-broadcast-tower me-1"></i>
                 Broadcast Ready
@@ -345,15 +495,43 @@ Karakter: ${message.length}/4000
                   </div>
                   
                   {blastStatus === 'processing' && (
-                    <div className="progress" style={{ height: '25px' }}>
-                      <div 
-                        className="progress-bar progress-bar-striped progress-bar-animated bg-primary" 
-                        role="progressbar" 
-                        style={{ width: `${typeof jobProgress === 'number' ? jobProgress : 0}%` }}
-                      >
-                        {typeof jobProgress === 'number' ? `${jobProgress}%` : 'Processing...'}
+                    <>
+                      <div className="progress mb-3" style={{ height: '25px' }}>
+                        <div 
+                          className="progress-bar progress-bar-striped progress-bar-animated bg-primary" 
+                          role="progressbar" 
+                          style={{ width: `${typeof jobProgress === 'number' ? jobProgress : 0}%` }}
+                        >
+                          {typeof jobProgress === 'number' ? `${jobProgress}%` : 'Processing...'}
+                        </div>
                       </div>
-                    </div>
+
+                      {/* Real-time results */}
+                      <div className="row mt-3">
+                        <div className="col-md-6">
+                          <div className="p-3 bg-success-subtle rounded">
+                            <div className="d-flex justify-content-between align-items-center">
+                              <span className="text-success fw-bold">
+                                <i className="fas fa-check-circle me-2"></i>
+                                Terkirim
+                              </span>
+                              <span className="badge bg-success">{sentList.length}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="col-md-6">
+                          <div className="p-3 bg-danger-subtle rounded">
+                            <div className="d-flex justify-content-between align-items-center">
+                              <span className="text-danger fw-bold">
+                                <i className="fas fa-times-circle me-2"></i>
+                                Gagal
+                              </span>
+                              <span className="badge bg-danger">{failedList.length}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </>
                   )}
                   
                   <div className="alert alert-info mt-3 mb-0 d-flex align-items-center">
@@ -364,50 +542,122 @@ Karakter: ${message.length}/4000
               </div>
             )}
 
-            {/* Blast Results - MOVED TO TOP */}
-            {blastResult && (
+            {/* Real-time Sent/Failed Lists - NEW */}
+            {(sentList.length > 0 || failedList.length > 0) && (
               <div className="card mb-4">
-                <div className="card-header bg-white border-bottom">
-                  <h5 className="card-title mb-0 text-dark fw-bold">
-                    <i className="fas fa-chart-bar text-primary me-2"></i>
-                    Hasil Blast
-                  </h5>
+                <div className="card-header bg-white">
+                  <ul className="nav nav-tabs card-header-tabs" role="tablist">
+                    <li className="nav-item">
+                      <a 
+                        className="nav-link active" 
+                        data-bs-toggle="tab" 
+                        href="#sentTab" 
+                        role="tab"
+                      >
+                        <i className="fas fa-check-circle text-success me-2"></i>
+                        Terkirim ({sentList.length})
+                      </a>
+                    </li>
+                    <li className="nav-item">
+                      <a 
+                        className="nav-link" 
+                        data-bs-toggle="tab" 
+                        href="#failedTab" 
+                        role="tab"
+                      >
+                        <i className="fas fa-times-circle text-danger me-2"></i>
+                        Gagal ({failedList.length})
+                      </a>
+                    </li>
+                  </ul>
                 </div>
-                <div className="card-body p-4">
-                  <div className="row text-center mb-4">
-                    <div className="col-6 col-md-3 mb-3">
-                      <div className="p-3 bg-primary-subtle rounded">
-                        <div className="text-primary h3 fw-bold">{blastResult.totalTargets}</div>
-                        <small className="text-muted fw-medium">Total Target</small>
-                      </div>
-                    </div>
-                    <div className="col-6 col-md-3 mb-3">
-                      <div className="p-3 bg-success-subtle rounded">
-                        <div className="text-success h3 fw-bold">{blastResult.sentCount}</div>
-                        <small className="text-muted fw-medium">Terkirim</small>
-                      </div>
-                    </div>
-                    <div className="col-6 col-md-3 mb-3">
-                      <div className="p-3 bg-danger-subtle rounded">
-                        <div className="text-danger h3 fw-bold">{blastResult.failedCount}</div>
-                        <small className="text-muted fw-medium">Gagal</small>
-                      </div>
-                    </div>
-                    <div className="col-6 col-md-3 mb-3">
-                      <div className="p-3 bg-info-subtle rounded">
-                        <div className="text-info h3 fw-bold">
-                          {blastResult.totalTargets > 0 
-                            ? Math.round((blastResult.sentCount / blastResult.totalTargets) * 100)
-                            : 0}%
+                <div className="card-body p-0">
+                  <div className="tab-content">
+                    {/* Sent Tab */}
+                    <div className="tab-pane fade show active" id="sentTab" role="tabpanel">
+                      {sentList.length > 0 ? (
+                        <div className="table-responsive" style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                          <table className="table table-hover mb-0">
+                            <thead className="sticky-top bg-white">
+                              <tr>
+                                <th style={{ width: '50px' }}>#</th>
+                                <th>Nama Customer</th>
+                                <th>Nomor WhatsApp</th>
+                                <th>Waktu Terkirim</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {sentList.map((item, idx) => (
+                                <tr key={item.id || idx}>
+                                  <td>{idx + 1}</td>
+                                  <td>
+                                    <i className="fas fa-user-circle text-muted me-2"></i>
+                                    {item.customerName}
+                                  </td>
+                                  <td>
+                                    <i className="fab fa-whatsapp text-success me-2"></i>
+                                    {item.customerPhone}
+                                  </td>
+                                  <td>
+                                    <small className="text-muted">
+                                      {item.sentAt ? new Date(item.sentAt).toLocaleTimeString('id-ID') : '-'}
+                                    </small>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
                         </div>
-                        <small className="text-muted fw-medium">Tingkat Keberhasilan</small>
-                      </div>
+                      ) : (
+                        <div className="p-4 text-center text-muted">
+                          <i className="fas fa-inbox fa-3x mb-3"></i>
+                          <p>Belum ada pesan yang terkirim</p>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                  
-                  <div className={`alert ${blastResult.success ? 'alert-success' : 'alert-warning'} d-flex align-items-center`}>
-                    <i className={`fas ${blastResult.success ? 'fa-check-circle' : 'fa-exclamation-triangle'} me-2`}></i>
-                    {blastResult.message}
+
+                    {/* Failed Tab */}
+                    <div className="tab-pane fade" id="failedTab" role="tabpanel">
+                      {failedList.length > 0 ? (
+                        <div className="table-responsive" style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                          <table className="table table-hover mb-0">
+                            <thead className="sticky-top bg-white">
+                              <tr>
+                                <th style={{ width: '50px' }}>#</th>
+                                <th>Nama Customer</th>
+                                <th>Nomor WhatsApp</th>
+                                <th>Error</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {failedList.map((item, idx) => (
+                                <tr key={item.id || idx}>
+                                  <td>{idx + 1}</td>
+                                  <td>
+                                    <i className="fas fa-user-circle text-muted me-2"></i>
+                                    {item.customerName}
+                                  </td>
+                                  <td>
+                                    <i className="fab fa-whatsapp text-danger me-2"></i>
+                                    {item.customerPhone}
+                                  </td>
+                                  <td>
+                                    <small className="text-danger">
+                                      {item.errorMessage || 'Unknown error'}
+                                    </small>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <div className="p-4 text-center text-muted">
+                          <i className="fas fa-check-circle fa-3x text-success mb-3"></i>
+                          <p>Tidak ada pesan yang gagal</p>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1012,6 +1262,173 @@ Karakter: ${message.length}/4000
           </div>
         </div>
       </div>
+
+      {/* Blast History Modal */}
+      {showHistory && (
+        <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog modal-xl modal-dialog-scrollable">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">
+                  <i className="fas fa-history text-primary me-2"></i>
+                  Riwayat Blast
+                </h5>
+                <button
+                  type="button"
+                  className="btn-close"
+                  onClick={() => setShowHistory(false)}
+                ></button>
+              </div>
+              <div className="modal-body">
+                {historyLoading ? (
+                  <div className="text-center py-5">
+                    <div className="spinner-border text-primary" role="status">
+                      <span className="visually-hidden">Loading...</span>
+                    </div>
+                  </div>
+                ) : blastHistory.length === 0 ? (
+                  <div className="text-center py-5 text-muted">
+                    <i className="fas fa-inbox fa-3x mb-3"></i>
+                    <p>Belum ada riwayat blast</p>
+                  </div>
+                ) : (
+                  <div className="list-group">
+                    {blastHistory.map((item, index) => (
+                      <div key={item.id} className="list-group-item">
+                        <div className="d-flex justify-content-between align-items-start">
+                          <div className="flex-grow-1">
+                            <div className="d-flex align-items-center mb-2">
+                              <span className="badge bg-secondary me-2">#{index + 1}</span>
+                              <small className="text-muted">
+                                {new Date(item.createdAt).toLocaleString('id-ID')}
+                              </small>
+                              <span className={`badge ms-2 ${
+                                item.status === 'COMPLETED' ? 'bg-success' :
+                                item.status === 'FAILED' ? 'bg-danger' :
+                                item.status === 'PROCESSING' ? 'bg-warning' :
+                                'bg-secondary'
+                              }`}>
+                                {item.status}
+                              </span>
+                              {item.sendMode && (
+                                <span className="badge bg-info ms-2">
+                                  {item.sendMode === 'caption' ? '📷 With Caption' : '📝 Separate Messages'}
+                                </span>
+                              )}
+                              {item.user?.outlet && (
+                                <span className="badge bg-warning-subtle text-warning ms-2">
+                                  <i className="fas fa-store me-1"></i>
+                                  {item.user.outlet.namaOutlet}
+                                </span>
+                              )}
+                              {item.user?.name && (
+                                <small className="text-muted ms-2">
+                                  <i className="fas fa-user me-1"></i>
+                                  {item.user.name}
+                                </small>
+                              )}
+                            </div>
+                            
+                            <div className="mb-2">
+                              <strong className="text-dark">Pesan:</strong>
+                              <p className="mb-1 ms-3" style={{ whiteSpace: 'pre-wrap' }}>
+                                {item.message.length > 200 
+                                  ? item.message.substring(0, 200) + '...' 
+                                  : item.message}
+                              </p>
+                            </div>
+
+                            {item.mediaType && (
+                              <div className="mb-2">
+                                <span className="badge bg-primary-subtle text-primary">
+                                  <i className="fas fa-paperclip me-1"></i>
+                                  {item.mediaType}
+                                </span>
+                              </div>
+                            )}
+
+                            <div className="row g-2 mt-2">
+                              <div className="col-auto">
+                                <small className="badge bg-primary-subtle text-primary">
+                                  <i className="fas fa-users me-1"></i>
+                                  Target: {item.targetCount || 0}
+                                </small>
+                              </div>
+                              <div className="col-auto">
+                                <small className="badge bg-success-subtle text-success">
+                                  <i className="fas fa-check me-1"></i>
+                                  Terkirim: {item.sentCount || 0}
+                                </small>
+                              </div>
+                              <div className="col-auto">
+                                <small className="badge bg-danger-subtle text-danger">
+                                  <i className="fas fa-times me-1"></i>
+                                  Gagal: {item.failedCount || 0}
+                                </small>
+                              </div>
+                              <div className="col-auto">
+                                <small className="badge bg-info-subtle text-info">
+                                  <i className="fas fa-percentage me-1"></i>
+                                  {item.targetCount > 0 
+                                    ? Math.round((item.sentCount / item.targetCount) * 100) 
+                                    : 0}% Sukses
+                                </small>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="ms-3">
+                            {item.failedCount > 0 && item.status === 'COMPLETED' && (
+                              <>
+                                {/* Check if user has permission to resend */}
+                                {(session?.user?.role === 'SUPERADMIN' || 
+                                  session?.user?.role === 'ADMIN' ||
+                                  (session?.user?.role === 'USER' && item.outletId === session?.user?.outletId)) ? (
+                                  <button
+                                    className="btn btn-sm btn-outline-danger"
+                                    onClick={() => handleResend(item)}
+                                    disabled={resendingId === item.id}
+                                  >
+                                    {resendingId === item.id ? (
+                                      <>
+                                        <span className="spinner-border spinner-border-sm me-1" role="status"></span>
+                                        Processing...
+                                      </>
+                                    ) : (
+                                      <>
+                                        <i className="fas fa-redo me-1"></i>
+                                        Kirim Ulang Gagal ({item.failedCount})
+                                      </>
+                                    )}
+                                  </button>
+                                ) : (
+                                  <small className="text-muted">
+                                    <i className="fas fa-lock me-1"></i>
+                                    Hanya outlet sendiri
+                                  </small>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setShowHistory(false)}
+                >
+                  Tutup
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Custom Styles for WhatsApp-like UI */}
       <style jsx>{`

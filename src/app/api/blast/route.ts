@@ -22,19 +22,14 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '10')
     const offset = (page - 1) * limit
 
-    // For now, return mock blast history since we don't have blast table yet
-    // When you have the blast table, uncomment and use the code below:
-
-    /*
     // Build where clause based on role
     let whereClause: any = {}
     if (session.user.role === 'USER' && session.user.outletId) {
-      // USER only sees blasts from their outlet users
-      const usersInOutlet = await prisma.user.findMany({
-        where: { outletId: session.user.outletId },
-        select: { id: true },
-      })
-      whereClause.userId = { in: usersInOutlet.map(u => u.id) }
+      // USER only sees blasts from their outlet
+      whereClause.outletId = session.user.outletId
+    } else if (session.user.role === 'ADMIN') {
+      // ADMIN sees all blasts
+      // No filter needed
     }
 
     const [blasts, total] = await Promise.all([
@@ -43,7 +38,7 @@ export async function GET(request: NextRequest) {
         include: {
           user: {
             select: {
-              nama: true,
+              name: true,
               outlet: {
                 select: { namaOutlet: true }
               }
@@ -56,43 +51,11 @@ export async function GET(request: NextRequest) {
       }),
       prisma.blast.count({ where: whereClause }),
     ])
-    */
 
-    // Mock data for now
-    const mockBlasts = [
-      {
-        id: '1',
-        message: 'Promo spesial hari ini! Diskon 50% untuk semua produk. Jangan sampai terlewat!',
-        targetCount: 25,
-        sentCount: 24,
-        failedCount: 1,
-        createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), // 2 hours ago
-        status: 'completed',
-        user: {
-          nama: session.user.name,
-          outlet: { namaOutlet: 'Outlet Demo' }
-        }
-      },
-      {
-        id: '2',
-        message: 'Selamat pagi! Kami memiliki koleksi baru yang menarik untuk Anda.',
-        targetCount: 18,
-        sentCount: 18,
-        failedCount: 0,
-        createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(), // 1 day ago
-        status: 'completed',
-        user: {
-          nama: session.user.name,
-          outlet: { namaOutlet: 'Outlet Demo' }
-        }
-      }
-    ]
-
-    const total = mockBlasts.length
     const totalPages = Math.ceil(total / limit)
 
     return NextResponse.json({
-      blasts: mockBlasts,
+      blasts,
       pagination: {
         page,
         limit,
@@ -127,12 +90,13 @@ export async function POST(request: NextRequest) {
     const outletIdsStr = formData.get('outletIds') as string | null
     const customerIdsStr = formData.get('customerIds') as string | null
     const sendMode = (formData.get('sendMode') as 'separate' | 'caption') || 'separate'
+    const skipSentCustomers = formData.get('skipSentCustomers') === 'true'
     
     const outletIds = outletIdsStr ? JSON.parse(outletIdsStr) : undefined
     const customerIds = customerIdsStr ? JSON.parse(customerIdsStr) : undefined
 
     console.log(`[Blast API] Payload - message length: ${message?.length || 0}, outletIds: ${outletIds?.length || 0}, customerIds: ${customerIds?.length || 0}`)
-    console.log(`[Blast API] Send mode: ${sendMode}`)
+    console.log(`[Blast API] Send mode: ${sendMode}, skipSentCustomers: ${skipSentCustomers}`)
 
     // Validate message
     if (!message || message.trim() === '') {
@@ -217,6 +181,7 @@ export async function POST(request: NextRequest) {
         userOutletId: session.user.outletId,
         mediaFiles: mediaFilesForQueue,
         sendMode,
+        skipSentCustomers,
       },
       {
         jobId: blast.id, // Use blast ID as job ID for easy tracking

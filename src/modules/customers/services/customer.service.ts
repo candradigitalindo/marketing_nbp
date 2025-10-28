@@ -134,9 +134,27 @@ export class CustomerService {
     return await this.customerRepository.delete(id)
   }
 
-  async getCustomersForBlast(userRole: string, userOutletId?: string | null, outletIds?: string[]) {
-    console.log(`[CustomerService] getCustomersForBlast - role: ${userRole}, userOutletId: ${userOutletId}, outletIds: ${outletIds?.join(',')}`)
+  async getCustomersForBlast(userRole: string, userOutletId?: string | null, outletIds?: string[], customerIds?: string[]) {
+    console.log(`[CustomerService] getCustomersForBlast - role: ${userRole}, userOutletId: ${userOutletId}, outletIds: ${outletIds?.join(',')}, customerIds: ${customerIds?.length || 0}`)
     
+    // If specific customerIds are provided
+    if (customerIds && customerIds.length > 0) {
+      console.log(`[CustomerService] Fetching specific ${customerIds.length} customers`)
+      
+      // For USER role, validate that all customers belong to their outlet
+      if (userRole === 'USER' && userOutletId) {
+        const hasAccess = await this.customerRepository.validateCustomerAccess(customerIds, userOutletId)
+        if (!hasAccess) {
+          console.error(`[CustomerService] USER tried to access customers outside their outlet`)
+          throw new Error('Access denied: You can only send to customers from your outlet')
+        }
+        return await this.customerRepository.findByIds(customerIds, userOutletId)
+      }
+      
+      // ADMIN and SUPERADMIN can access any customers
+      return await this.customerRepository.findByIds(customerIds)
+    }
+
     if (userRole === 'SUPERADMIN') {
       // SUPERADMIN can access all customers
       if (outletIds && outletIds.length > 0) {

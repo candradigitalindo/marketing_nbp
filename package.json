@@ -12,6 +12,8 @@
     "restart:prod": "pm2 restart ecosystem.config.js",
     "logs:prod": "pm2 logs",
     "health": "node health-check.js",
+    "debug:blast": "node debug-blast.js",
+    "restart:worker": "./restart-worker.sh",
     "lint": "next lint",
     "seed": "tsx prisma/seed.ts",
     "worker": "tsx worker.ts",

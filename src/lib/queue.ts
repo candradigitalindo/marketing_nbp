@@ -19,6 +19,7 @@ export interface BlastJobData {
     mimetype: string
   }[]
   sendMode: 'separate' | 'caption'
+  skipSentCustomers?: boolean
 }
 
 // Create queue instance
@@ -69,6 +70,7 @@ export function startBlastWorker(processor: BlastJobProcessor) {
     {
       connection,
       concurrency: 1, // Process one blast at a time to avoid rate limits
+      lockDuration: 600000, // 10 minutes (increased from default 30s to handle large blasts with media)
       limiter: {
         max: 1, // Max 1 job
         duration: 1000, // per 1 second

@@ -29,6 +29,8 @@ export async function GET(
         },
         reports: {
           select: {
+            id: true,
+            customerId: true,
             status: true,
             customerName: true,
             customerPhone: true,
@@ -46,10 +48,16 @@ export async function GET(
       return NextResponse.json({ error: 'Blast not found' }, { status: 404 })
     }
 
-    // Check authorization
-    if (session.user.role === 'USER' && blast.userId !== session.user.id) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    // Check authorization based on role
+    if (session.user.role === 'USER') {
+      // USER can only access blasts from their outlet
+      if (blast.outletId !== session.user.outletId) {
+        return NextResponse.json({ 
+          error: 'Forbidden: You can only access blasts from your outlet' 
+        }, { status: 403 })
+      }
     }
+    // ADMIN and SUPERADMIN can access all blasts (no restriction)
 
     // Get job status from queue
     const queue = getBlastQueue()
@@ -62,6 +70,10 @@ export async function GET(
       jobProgress = job.progress || 0
       jobState = await job.getState()
     }
+
+    // Separate sent and failed reports
+    const sentReports = blast.reports.filter(r => r.status === 'sent')
+    const failedReports = blast.reports.filter(r => r.status === 'failed')
 
     return NextResponse.json({
       blast: {
@@ -82,6 +94,8 @@ export async function GET(
         state: jobState,
       },
       reports: blast.reports,
+      sent: sentReports,
+      failed: failedReports,
     })
 
   } catch (error) {

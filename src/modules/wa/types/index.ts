@@ -2,6 +2,7 @@ export interface BlastRequest {
   message: string
   outletIds?: string[]
   customerIds?: string[]
+  excludeCustomerIds?: string[]
 }
 
 export interface BlastTarget {
