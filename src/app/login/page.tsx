@@ -68,7 +68,6 @@ export default function LoginPage() {
                       type="text"
                       className="form-control form-control-lg"
                       id="noHp"
-                      placeholder="Masukkan nomor handphone Anda"
                       value={noHp}
                       onChange={(e) => setNoHp(e.target.value)}
                       required
@@ -85,7 +84,6 @@ export default function LoginPage() {
                       type="password"
                       className="form-control form-control-lg"
                       id="password"
-                      placeholder="Masukkan password Anda"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       required
@@ -112,31 +110,6 @@ export default function LoginPage() {
                     )}
                   </button>
                 </form>
-
-                <div className="mt-4">
-                  <div className="card bg-light border-0" style={{ borderRadius: '0.75rem' }}>
-                    <div className="card-body p-3">
-                      <h6 className="card-title mb-2 text-primary">
-                        <i className="fas fa-info-circle me-2"></i>
-                        Akun Demo:
-                      </h6>
-                      <div className="small text-muted">
-                        <div className="mb-1">
-                          <span className="badge bg-danger me-2">SUPERADMIN</span>
-                          081234567890 / password
-                        </div>
-                        <div className="mb-1">
-                          <span className="badge bg-warning me-2">ADMIN</span>
-                          081234567891 / password
-                        </div>
-                        <div>
-                          <span className="badge bg-info me-2">USER</span>
-                          081234567892 / password
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
               </div>
             </div>
           </div>
